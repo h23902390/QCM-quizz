@@ -32,8 +32,16 @@ const levenshtein = (a, b) => {
   return m[b.length][a.length];
 };
 
-const isGreenPixel = (r, g, b) =>
-  g > r + 18 && g > b + 18 && g > 80 && g < 230;
+// Classifie un pixel: 'white' (fond) | 'black' (texte noir/gris neutre) |
+// 'green' (vert dominant) | 'other' (autre couleur)
+const classifyPixel = (r, g, b) => {
+  if (r > 235 && g > 235 && b > 235) return 'white';
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const sat = max - min;
+  if (sat < 22) return 'black'; // gris ou noir
+  if (g > r + 15 && g > b + 15) return 'green';
+  return 'other';
+};
 
 // ---------- Component ----------
 export default function App() {
@@ -177,8 +185,11 @@ export default function App() {
   };
 
   // ---------- Détection des bonnes réponses (couleur) ----------
+  // Pour chaque ligne d'option (commençant par A/B/C/D/E), calcule la bbox de
+  // la ligne, échantillonne tous les pixels colorés, et marque l'option comme
+  // « correcte » si les pixels verts dominent (vs. noirs/gris du texte normal).
   const detectGreenOptions = async (page, items, lines) => {
-    const scale = 1.5;
+    const scale = 2.0;
     const viewport = page.getViewport({ scale });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
@@ -186,36 +197,57 @@ export default function App() {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     await page.render({ canvasContext: ctx, viewport }).promise;
     const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const W = canvas.width;
+    const W = canvas.width, H = canvas.height;
 
-    const sampleColor = (item) => {
-      const [cx, cy] = viewport.convertToViewportPoint(item.x, item.y);
-      let greenCount = 0, totalCount = 0;
-      const wPx = Math.max(item.w * scale, 30);
-      const hPx = Math.max(item.h * scale, 10);
-      for (let dx = 0; dx < wPx; dx += 4) {
-        for (let dy = -hPx * 0.7; dy < 0; dy += 3) {
-          const px = Math.round(cx + dx);
-          const py = Math.round(cy + dy);
-          if (px < 0 || px >= W || py < 0 || py >= canvas.height) continue;
+    const analyzeBox = (x0, y0, x1, y1) => {
+      let textPx = 0, greenPx = 0, blackPx = 0, otherPx = 0;
+      const xs = Math.max(0, Math.floor(x0));
+      const xe = Math.min(W, Math.ceil(x1));
+      const ys = Math.max(0, Math.floor(y0));
+      const ye = Math.min(H, Math.ceil(y1));
+      for (let py = ys; py < ye; py += 2) {
+        for (let px = xs; px < xe; px += 2) {
           const i = (py * W + px) * 4;
-          const r = img.data[i], g = img.data[i + 1], b = img.data[i + 2];
-          if (r > 240 && g > 240 && b > 240) continue;
-          totalCount++;
-          if (isGreenPixel(r, g, b)) greenCount++;
+          const cls = classifyPixel(img.data[i], img.data[i + 1], img.data[i + 2]);
+          if (cls === 'white') continue;
+          textPx++;
+          if (cls === 'green') greenPx++;
+          else if (cls === 'black') blackPx++;
+          else otherPx++;
         }
       }
-      return totalCount > 0 && greenCount / totalCount > 0.3;
+      return { textPx, greenPx, blackPx, otherPx };
     };
 
     const correctLetters = new Set();
     for (const line of lines) {
-      const lineText = line.sort((a, b) => a.x - b.x).map(it => it.str).join('').trim();
+      const sortedLine = [...line].sort((a, b) => a.x - b.x);
+      const lineText = sortedLine.map(it => it.str).join('').trim();
       const m = lineText.match(/^\s*([A-Ea-e])\s*[\.\)\-:\/]?\s+\S/);
       if (!m) continue;
-      const textItems = line.filter(it => it.str.trim().length > 0);
-      if (textItems.length === 0) continue;
-      const isGreen = textItems.some(sampleColor);
+
+      // Bounding box de la ligne en coordonnées canvas
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const it of sortedLine) {
+        if (!it.str.trim()) continue;
+        const [cx, cy] = viewport.convertToViewportPoint(it.x, it.y);
+        const wPx = Math.max(it.w * scale, 4);
+        const hPx = Math.max(it.h * scale, 8);
+        minX = Math.min(minX, cx);
+        maxX = Math.max(maxX, cx + wPx);
+        minY = Math.min(minY, cy - hPx);          // haut du glyphe
+        maxY = Math.max(maxY, cy + hPx * 0.25);   // descender
+      }
+      if (minX === Infinity) continue;
+
+      const stats = analyzeBox(minX - 2, minY - 2, maxX + 2, maxY + 2);
+      if (stats.textPx < 12) continue;
+
+      // Verte si: pixels verts en quantité absolue suffisante,
+      // ET (au moins 12% des pixels colorés OU verts > noirs/2)
+      const greenRatio = stats.greenPx / stats.textPx;
+      const greenVsBlack = stats.blackPx === 0 ? Infinity : stats.greenPx / stats.blackPx;
+      const isGreen = stats.greenPx >= 20 && (greenRatio >= 0.12 || greenVsBlack >= 0.5);
       if (isGreen) correctLetters.add(m[1].toUpperCase());
     }
 
