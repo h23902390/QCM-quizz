@@ -130,6 +130,36 @@ export default function App() {
     return { text, items, lines };
   };
 
+  // ---------- Détection permissive des marqueurs d'options ----------
+  // Trouve les positions des marqueurs A./B)/C-/D:/E… dans un texte.
+  // Tolère: minuscules, espaces avant, ponctuation variée (. ) - : /), options
+  // sur la même ligne ou sur des lignes différentes. Ne garde que les lettres
+  // qui se suivent dans l'ordre A → B → C → D → E (évite les faux positifs
+  // type « 3) Question A propos de … »).
+  const findOptionMarkers = (text) => {
+    const re = /(^|[\n\s\(\[])([A-Ea-e])\s*[\.\)\-:\/]\s+(?=\S)/g;
+    const all = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      all.push({
+        letter: m[2].toUpperCase(),
+        startIdx: m.index + m[1].length,
+        contentIdx: m.index + m[0].length,
+      });
+    }
+    const order = ['A', 'B', 'C', 'D', 'E'];
+    const out = [];
+    let next = 0;
+    for (const f of all) {
+      if (f.letter === order[next]) {
+        out.push(f);
+        next++;
+        if (next >= order.length) break;
+      }
+    }
+    return out;
+  };
+
   // ---------- Classification d'une page ----------
   const classifyPage = (text) => {
     const t = text.trim();
@@ -137,12 +167,12 @@ export default function App() {
     const low = t.toLowerCase();
     if (low.length < 60 && (low.includes('chargement') || low.includes('loading'))) return 'loading';
     const hasQLabel = /\bquestion\s*\d+/i.test(t);
-    const optionLines = t.match(/(^|\n)\s*[A-E][\.\)]\s+\S/g) || [];
+    const markers = findOptionMarkers(t);
     const hasQMark = /\?/.test(t);
-    if (optionLines.length >= 3) return 'qcm';
+    if (markers.length >= 2) return 'qcm';
     if (hasQLabel && hasQMark) return 'qroc';
     if (hasQLabel && t.length < 80) return 'qroc';
-    if (t.length > 120 && optionLines.length === 0 && !hasQLabel) return 'context';
+    if (t.length > 120 && markers.length === 0 && !hasQLabel) return 'context';
     return 'correction';
   };
 
@@ -181,12 +211,12 @@ export default function App() {
     const correctLetters = new Set();
     for (const line of lines) {
       const lineText = line.sort((a, b) => a.x - b.x).map(it => it.str).join('').trim();
-      const m = lineText.match(/^([A-E])[\.\)]?\s/);
+      const m = lineText.match(/^\s*([A-Ea-e])\s*[\.\)\-:\/]?\s+\S/);
       if (!m) continue;
       const textItems = line.filter(it => it.str.trim().length > 0);
       if (textItems.length === 0) continue;
       const isGreen = textItems.some(sampleColor);
-      if (isGreen) correctLetters.add(m[1]);
+      if (isGreen) correctLetters.add(m[1].toUpperCase());
     }
 
     canvas.width = 0; canvas.height = 0;
@@ -194,30 +224,26 @@ export default function App() {
   };
 
   const parseOptions = (text, correctSet) => {
-    const lines = text.split('\n');
+    const markers = findOptionMarkers(text);
+    if (markers.length === 0) return [];
     const opts = [];
-    let current = null;
-    for (const line of lines) {
-      const m = line.match(/^([A-E])[\.\)]\s*(.*)/);
-      if (m) {
-        if (current) opts.push(current);
-        current = { letter: m[1], text: m[2].trim(), correct: correctSet.has(m[1]) };
-      } else if (current && line.trim()) {
-        current.text += ' ' + line.trim();
-      }
+    for (let i = 0; i < markers.length; i++) {
+      const start = markers[i].contentIdx;
+      const end = i + 1 < markers.length ? markers[i + 1].startIdx : text.length;
+      const raw = text.slice(start, end).replace(/\s+/g, ' ').trim();
+      opts.push({
+        letter: markers[i].letter,
+        text: raw,
+        correct: correctSet.has(markers[i].letter),
+      });
     }
-    if (current) opts.push(current);
     return opts;
   };
 
   const parseQCMEnonce = (text) => {
-    const lines = text.split('\n');
-    const out = [];
-    for (const line of lines) {
-      if (/^[A-E][\.\)]\s/.test(line.trim())) break;
-      out.push(line);
-    }
-    return out.join('\n').trim();
+    const markers = findOptionMarkers(text);
+    if (markers.length === 0) return text.trim();
+    return text.slice(0, markers[0].startIdx).trim();
   };
 
   const parseQROC = (text) => {
