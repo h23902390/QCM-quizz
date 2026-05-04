@@ -510,11 +510,18 @@ Contraintes :
   // À la connexion: charge la clé API depuis user metadata + la liste des decks
   useEffect(() => {
     if (!session) { setDecks([]); return; }
-    const meta = session.user?.user_metadata || {};
-    if (meta.openai_key && meta.openai_key !== apiKey) {
-      setApiKey(meta.openai_key);
-      try { localStorage.setItem('openai_key', meta.openai_key); } catch {}
-    }
+    // Refresh user from server pour avoir la dernière clé API (sync multi-appareils)
+    supabase.auth.getUser().then(({ data }) => {
+      const meta = data?.user?.user_metadata || session.user?.user_metadata || {};
+      if (meta.openai_key && meta.openai_key !== apiKey) {
+        setApiKey(meta.openai_key);
+        try { localStorage.setItem('openai_key', meta.openai_key); } catch {}
+      }
+      if (meta.model && meta.model !== model) {
+        setModel(meta.model);
+        try { localStorage.setItem('model', meta.model); } catch {}
+      }
+    }).catch(e => console.warn('getUser', e));
     listDecks().then(setDecks).catch(e => console.warn('listDecks', e));
     // Synchro ECOS : fusion local <-> Supabase
     (async () => {
