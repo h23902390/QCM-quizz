@@ -516,6 +516,9 @@ Contraintes :
       if (meta.openai_key && meta.openai_key !== apiKey) {
         setApiKey(meta.openai_key);
         try { localStorage.setItem('openai_key', meta.openai_key); } catch {}
+      } else if (!meta.openai_key && apiKey) {
+        // Push la cle locale vers Supabase (cas: cle saisie avant login)
+        saveApiKey(apiKey).catch(e => console.warn('saveApiKey push', e));
       }
       if (meta.model && meta.model !== model) {
         setModel(meta.model);
