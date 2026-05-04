@@ -53,6 +53,25 @@ create policy "ecos_cases_owner_update" on public.ecos_cases
 create policy "ecos_cases_owner_delete" on public.ecos_cases
   for delete using (auth.uid() = user_id);
 
+-- ---------- Analyses partiels sauvegardées ----------
+create table if not exists public.analyses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
+  name text not null,
+  data jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table public.analyses enable row level security;
+drop policy if exists "analyses_owner_select" on public.analyses;
+drop policy if exists "analyses_owner_insert" on public.analyses;
+drop policy if exists "analyses_owner_update" on public.analyses;
+drop policy if exists "analyses_owner_delete" on public.analyses;
+create policy "analyses_owner_select" on public.analyses for select using (auth.uid() = user_id);
+create policy "analyses_owner_insert" on public.analyses for insert with check (auth.uid() = user_id);
+create policy "analyses_owner_update" on public.analyses for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "analyses_owner_delete" on public.analyses for delete using (auth.uid() = user_id);
+create index if not exists analyses_user_created_idx on public.analyses (user_id, created_at desc);
+
 -- ---------- Entretiens (audio + transcription + note, auto-suppression 24h) ----------
 create table if not exists public.entretiens (
   id uuid primary key default gen_random_uuid(),

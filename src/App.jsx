@@ -2853,7 +2853,7 @@ Contraintes :
 
       {mode === 'analyse' && (
         <iframe
-          src="/analyse-partiels.html"
+          src={`/analyse-partiels.html${supabaseEnabled ? `?su=${encodeURIComponent(import.meta.env.VITE_SUPABASE_URL)}&sk=${encodeURIComponent(import.meta.env.VITE_SUPABASE_ANON_KEY)}` : ''}`}
           title="Analyse des partiels"
           style={{
             width: '100%',

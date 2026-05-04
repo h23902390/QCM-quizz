@@ -193,6 +193,9 @@ input.f:focus{border-color:var(--ink);}
 .hhd h3{margin:0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:400;font-size:20px;letter-spacing:-.01em;}
 .hhd .hst{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.02em;}
 .harea{position:relative;height:200px;margin-top:14px;}
+.gausswrap{cursor:crosshair;user-select:none;-webkit-user-select:none;}
+.gtip{position:absolute;top:6px;display:none;background:var(--ink);color:var(--cardalt);padding:6px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:11px;line-height:1.35;pointer-events:none;white-space:nowrap;z-index:5;border-radius:2px;}
+.gtip b{font-family:'IBM Plex Mono',monospace;font-size:13px;}
 .hgrid{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;padding-left:28px;}
 .hgl{border-top:1px dashed var(--linef);width:100%;position:relative;}
 .hgl span{position:absolute;left:-28px;top:-8px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-align:right;width:24px;}
@@ -345,6 +348,19 @@ input.f:focus{border-color:var(--ink);}
       <div class="rhead"><span class="rnum mono">03</span><h2 class="ff"><em>Distributions</em></h2></div>
       <div class="dchips" id="dchips"></div>
       <div id="histcont"></div>
+    </div>
+
+    <div id="sec-cloud" hidden style="margin-top:32px;padding:18px 20px;background:var(--cardalt);border:1px solid var(--linef);">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+        <h3 class="ff" style="margin:0;font-size:18px;"><em>Sauvegarder l'analyse</em></h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input id="cl-name" type="text" placeholder="Nom de l'analyse" style="padding:6px 10px;border:1px solid var(--line);background:white;font-family:inherit;font-size:13px;min-width:180px;"/>
+          <button id="cl-save" class="pdfbtn" style="background:var(--ink);color:var(--cardalt);border:none;padding:7px 14px;cursor:pointer;font-size:12px;">Sauvegarder</button>
+          <button id="cl-refresh" class="pdfbtn" style="background:none;border:1px solid var(--line);padding:7px 12px;cursor:pointer;font-size:12px;">↻</button>
+        </div>
+      </div>
+      <div id="cl-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px;min-height:14px;"></div>
+      <div id="cl-list" style="font-family:'IBM Plex Mono',monospace;font-size:12px;"></div>
     </div>
 
     <div class="method">
@@ -692,26 +708,85 @@ function rDist(){
 }
 
 function buildHist(title,stats,g1,g2){
-  const sm=S.scaleMax;const bc=Math.min(20,Math.max(10,Math.round(sm)));
-  const bins=BINS(stats.sorted,0,sm,bc);const mc=Math.max(...bins.map(b=>b.count),1);
+  const sm=S.scaleMax;
   const card=document.createElement('div');card.className='hcard';
   card.innerHTML=`
     <div class="hhd"><h3 class="ff">${esc(title)}</h3><div class="hst mono">n = ${fi(stats.n)} · méd. ${fm(stats.median)} · Q1 ${fm(stats.q1)} · Q3 ${fm(stats.q3)} · σ ${fm(stats.stdev)}</div></div>
-    <div class="harea"><div class="hgrid"></div><div class="hchart"></div></div>
+    <div class="harea gausswrap"></div>
     <div class="haxis"></div><div class="hleg"></div>`;
-  const grid=card.querySelector('.hgrid');
-  for(let i=0;i<=4;i++){const gl=document.createElement('div');gl.className='hgl';const sp=document.createElement('span');sp.textContent=Math.round(mc*(4-i)/4);gl.appendChild(sp);grid.appendChild(gl);}
-  const chart=card.querySelector('.hchart');
-  bins.forEach(b=>{const bar=document.createElement('div');bar.className='hbar';bar.style.height=(b.count/mc*100)+'%';const c1=g1!=null&&g1>=b.x0&&g1<=b.x1,c2=g2!=null&&g2>=b.x0&&g2<=b.x1;if(c1&&c2)bar.classList.add('both');else if(c1)bar.classList.add('a1');else if(c2)bar.classList.add('a2');bar.title=`[${fm(b.x0,1)} – ${fm(b.x1,1)}[ — ${b.count} étudiant${b.count>1?'s':''}`;chart.appendChild(bar);});
-  const addL=(v,cls)=>{const l=document.createElement('div');l.className='hline '+cls;l.style.left=(v/sm*100)+'%';chart.appendChild(l);};
-  addL(stats.q1,'q');addL(stats.q3,'q');addL(stats.median,'median');
-  if(g1!=null)addL(g1,'s1');if(g2!=null)addL(g2,'s2');
-  const ax=card.querySelector('.haxis');for(let i=0;i<=10;i++){const sp=document.createElement('span');sp.textContent=String(Math.round(i*sm/10));ax.appendChild(sp);}
+  const ax=card.querySelector('.haxis');
+  for(let i=0;i<=10;i++){const sp=document.createElement('span');sp.textContent=String(Math.round(i*sm/10));ax.appendChild(sp);}
   const leg=card.querySelector('.hleg');
   leg.innerHTML=`<div class="li" style="color:var(--ink)"><span class="ls d"></span>médiane</div><div class="li" style="color:var(--muted)"><span class="ls d"></span>Q1 · Q3</div>`;
   if(g1!=null)leg.innerHTML+=`<div class="li" style="color:var(--a1)"><span class="ls s"></span>A : ${fm(g1)} · rang ${fi(RK(g1,stats.sorted))}/${fi(stats.n)} · ${fp(PC(g1,stats.sorted))}</div>`;
   if(g2!=null)leg.innerHTML+=`<div class="li" style="color:var(--a2)"><span class="ls s"></span>B : ${fm(g2)} · rang ${fi(RK(g2,stats.sorted))}/${fi(stats.n)} · ${fp(PC(g2,stats.sorted))}</div>`;
+  // Courbe de Gauss interactive
+  const wrap=card.querySelector('.gausswrap');
+  buildGauss(wrap,stats,g1,g2,sm);
   return card;
+}
+
+function buildGauss(wrap,stats,g1,g2,sm){
+  const W=1000,H=200,PADL=8,PADR=8,PADT=10,PADB=4;
+  const mu=stats.mean, sigma=Math.max(stats.stdev||0.5,0.4);
+  // y(x) = exp(-((x-mu)/sigma)²/2). Max=1 à x=mu.
+  const pdf=x=>Math.exp(-Math.pow((x-mu)/sigma,2)/2);
+  const xToPx=x=>PADL+(x/sm)*(W-PADL-PADR);
+  const yToPx=y=>PADT+(1-y)*(H-PADT-PADB);
+  // chemin
+  const N=240;let path='';
+  for(let i=0;i<=N;i++){const x=i*sm/N;const px=xToPx(x);const py=yToPx(pdf(x));path+=(i===0?'M':'L')+px.toFixed(1)+','+py.toFixed(1)+' ';}
+  const area=path+`L ${xToPx(sm)},${yToPx(0)} L ${xToPx(0)},${yToPx(0)} Z`;
+  const ns='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(ns,'svg');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio','none');
+  svg.style.width='100%';svg.style.height='100%';svg.style.display='block';svg.style.touchAction='none';
+  // grille horizontale légère
+  for(let i=1;i<=3;i++){const y=PADT+i*(H-PADT-PADB)/4;const ln=document.createElementNS(ns,'line');ln.setAttribute('x1',PADL);ln.setAttribute('x2',W-PADR);ln.setAttribute('y1',y);ln.setAttribute('y2',y);ln.setAttribute('stroke','var(--linef)');ln.setAttribute('stroke-dasharray','2 3');svg.appendChild(ln);}
+  // aire
+  const ar=document.createElementNS(ns,'path');ar.setAttribute('d',area);ar.setAttribute('fill','color-mix(in srgb,var(--muted) 14%,transparent)');svg.appendChild(ar);
+  // courbe
+  const ln=document.createElementNS(ns,'path');ln.setAttribute('d',path);ln.setAttribute('fill','none');ln.setAttribute('stroke','var(--ink)');ln.setAttribute('stroke-width','1.6');ln.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(ln);
+  // marqueurs verticaux
+  const addV=(v,col,dash,w)=>{if(v==null||isNaN(v))return;const x=xToPx(v);const l=document.createElementNS(ns,'line');l.setAttribute('x1',x);l.setAttribute('x2',x);l.setAttribute('y1',yToPx(0));l.setAttribute('y2',yToPx(pdf(v)));l.setAttribute('stroke',col);l.setAttribute('stroke-width',w);if(dash)l.setAttribute('stroke-dasharray',dash);l.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(l);};
+  addV(stats.q1,'var(--muted)','3 3',1);
+  addV(stats.q3,'var(--muted)','3 3',1);
+  addV(stats.median,'var(--ink)','4 3',1.5);
+  addV(g1,'var(--a1)',null,2.2);
+  addV(g2,'var(--a2)',null,2.2);
+  // curseur interactif
+  const cursor=document.createElementNS(ns,'g');cursor.style.display='none';
+  const cl=document.createElementNS(ns,'line');cl.setAttribute('y1',PADT);cl.setAttribute('y2',H-PADB);cl.setAttribute('stroke','var(--ink)');cl.setAttribute('stroke-width','1');cl.setAttribute('vector-effect','non-scaling-stroke');cursor.appendChild(cl);
+  const cd=document.createElementNS(ns,'circle');cd.setAttribute('r','4');cd.setAttribute('fill','var(--ink)');cursor.appendChild(cd);
+  svg.appendChild(cursor);
+  wrap.appendChild(svg);
+  // tooltip
+  const tip=document.createElement('div');tip.className='gtip';wrap.appendChild(tip);
+  const move=(ev)=>{
+    const rect=svg.getBoundingClientRect();
+    const cx=(ev.touches?ev.touches[0].clientX:ev.clientX)-rect.left;
+    const ratio=Math.max(0,Math.min(1,cx/rect.width));
+    const xVal=ratio*sm;
+    const px=xToPx(xVal),py=yToPx(pdf(xVal));
+    cl.setAttribute('x1',px);cl.setAttribute('x2',px);
+    cd.setAttribute('cx',px);cd.setAttribute('cy',py);
+    cursor.style.display='';
+    const pc=PC(xVal,stats.sorted);
+    const rk=RK(xVal,stats.sorted);
+    tip.innerHTML=`<b>${fm(xVal)}</b> / ${sm}<br><span class="mono">centile ${fp(pc)} · rang ${fi(rk)}/${fi(stats.n)}</span>`;
+    const wrapRect=wrap.getBoundingClientRect();
+    const left=Math.min(wrapRect.width-130,Math.max(4,cx-65));
+    tip.style.left=left+'px';
+    tip.style.display='block';
+    if(ev.cancelable)ev.preventDefault();
+  };
+  const leave=()=>{cursor.style.display='none';tip.style.display='none';};
+  svg.addEventListener('pointermove',move);
+  svg.addEventListener('pointerdown',move);
+  svg.addEventListener('pointerleave',leave);
+  svg.addEventListener('touchmove',move,{passive:false});
+  svg.addEventListener('touchend',leave);
 }
 
 document.getElementById('fi').addEventListener('change',e=>handleFile(e.target.files?.[0]));
@@ -776,6 +851,67 @@ async function exportPDF(){
 }
 
 renderAll();
+
+// ---------- Sauvegarde Supabase (cloud) ----------
+(async function initCloud(){
+  const params=new URLSearchParams(location.search);
+  const su=params.get('su'),sk=params.get('sk');
+  const sec=document.getElementById('sec-cloud');
+  if(!su||!sk)return; // Supabase non configuré
+  let sb;
+  try{
+    const mod=await import('https://esm.sh/@supabase/supabase-js@2');
+    sb=mod.createClient(su,sk,{auth:{persistSession:true,storageKey:'sb-'+new URL(su).host.split('.')[0]+'-auth-token'}});
+  }catch(e){console.warn('Supabase load failed',e);return;}
+  const{data:{session}}=await sb.auth.getSession();
+  if(!session){
+    sec.hidden=false;
+    document.getElementById('cl-msg').textContent='Connecte-toi dans l\'app principale pour sauvegarder tes analyses.';
+    document.getElementById('cl-save').disabled=true;
+    document.getElementById('cl-name').disabled=true;
+    return;
+  }
+  sec.hidden=false;
+  const msg=t=>{document.getElementById('cl-msg').textContent=t||'';};
+  const serialize=()=>{
+    const cp={...S};cp.excluded=[...S.excluded];return cp;
+  };
+  const restore=(d)=>{
+    Object.assign(S,d);
+    S.excluded=new Set(Array.isArray(d.excluded)?d.excluded:[]);
+    if(d.reportDate)S.reportDate=new Date(d.reportDate);
+    recomp();renderAll();
+    setTimeout(()=>document.getElementById('sec-results')?.scrollIntoView({behavior:'smooth'}),100);
+  };
+  const refresh=async()=>{
+    const list=document.getElementById('cl-list');list.innerHTML='Chargement…';
+    const{data,error}=await sb.from('analyses').select('id,name,created_at').order('created_at',{ascending:false});
+    if(error){list.innerHTML='<span style="color:var(--a1)">Erreur : '+error.message+'</span>';return;}
+    if(!data||!data.length){list.innerHTML='<span style="color:var(--muted)">Aucune analyse sauvegardée.</span>';return;}
+    list.innerHTML='';
+    data.forEach(r=>{
+      const row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--linef);';
+      const dt=new Date(r.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});
+      row.innerHTML=`<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.name.replace(/[<>&]/g,'')}</span><span style="color:var(--muted);font-size:11px;">${dt}</span>`;
+      const bO=document.createElement('button');bO.textContent='Ouvrir';bO.style.cssText='background:none;border:1px solid var(--line);padding:4px 10px;cursor:pointer;font-size:11px;font-family:inherit;';
+      const bD=document.createElement('button');bD.textContent='Suppr.';bD.style.cssText='background:none;border:1px solid var(--line);padding:4px 10px;cursor:pointer;font-size:11px;font-family:inherit;color:var(--a1);';
+      bO.onclick=async()=>{const{data:full,error:e}=await sb.from('analyses').select('data').eq('id',r.id).single();if(e){msg('Erreur : '+e.message);return;}restore(full.data);msg('Analyse "'+r.name+'" chargée.');};
+      bD.onclick=async()=>{if(!confirm('Supprimer "'+r.name+'" ?'))return;const{error:e}=await sb.from('analyses').delete().eq('id',r.id);if(e){msg('Erreur : '+e.message);return;}refresh();};
+      row.appendChild(bO);row.appendChild(bD);list.appendChild(row);
+    });
+  };
+  document.getElementById('cl-save').addEventListener('click',async()=>{
+    if(!S.rows){msg('Charge d\'abord un fichier.');return;}
+    const name=(document.getElementById('cl-name').value||'').trim()||(S.fileName||'Analyse')+' — '+new Date().toLocaleDateString('fr-FR');
+    msg('Sauvegarde…');
+    const{error}=await sb.from('analyses').insert({name,data:serialize()});
+    if(error){msg('Erreur : '+error.message);return;}
+    msg('✓ Sauvegardé.');document.getElementById('cl-name').value='';refresh();
+  });
+  document.getElementById('cl-refresh').addEventListener('click',refresh);
+  refresh();
+})();
 </script>
 </body>
 </html>
