@@ -46,7 +46,13 @@ h1 em{color:var(--a1);}
 .hmeta{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:right;}
 
 main{padding:40px 0 100px;display:flex;flex-direction:column;gap:44px;}
+main.app-shell{max-width:1280px;}
 @media(min-width:768px){main{padding:52px 0 120px;gap:56px;}}
+@media(min-width:1040px){
+  main.app-shell{display:grid;grid-template-columns:300px minmax(0,1fr);align-items:start;gap:32px;}
+  main.app-shell>:not(#sec-cloud){grid-column:2;}
+  #sec-cloud{grid-column:1;grid-row:1 / span 8;position:sticky;top:18px;}
+}
 
 .shead{display:flex;align-items:baseline;gap:18px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line);}
 .snum{font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:300;font-size:22px;color:var(--a1);flex-shrink:0;}
@@ -143,6 +149,23 @@ input.f:focus{border-color:var(--ink);}
 .pdfbtn svg{width:14px;height:14px;fill:currentColor;flex-shrink:0;}
 .pdfbtn .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
 @keyframes spin{to{transform:rotate(360deg);}}
+
+.cloud-side{background:var(--card);border:1px solid var(--line);border-top:4px solid var(--ink);padding:16px;}
+.cloud-side h2{margin:0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:22px;letter-spacing:-.01em;}
+.cloud-sub{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.04em;margin-top:4px;}
+.cloud-save{display:grid;gap:8px;margin:16px 0 12px;}
+.cloud-save input{width:100%;padding:8px 10px;border:1px solid var(--line);background:white;font-family:'IBM Plex Mono',monospace;font-size:12px;}
+.cloud-actions{display:flex;gap:8px;}
+.cloud-actions .pdfbtn{justify-content:center;padding:8px 10px;font-size:11px;}
+.cloud-actions .pdfbtn:first-child{flex:1;}
+.cloud-msg{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);min-height:14px;margin-bottom:10px;}
+.cloud-list{display:grid;gap:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.cloud-item{border:1px solid var(--linef);background:var(--cardalt);padding:10px;display:grid;gap:8px;}
+.cloud-item-title{font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cloud-item-date{color:var(--muted);font-size:10px;}
+.cloud-item-actions{display:flex;gap:6px;}
+.cloud-mini{background:white;border:1px solid var(--line);padding:5px 8px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink);}
+.cloud-mini.danger{color:var(--a1);}
 
 .herogrid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:40px;}
 @media(min-width:768px){.herogrid.two{grid-template-columns:1fr 1fr;}}
@@ -256,7 +279,21 @@ input.f:focus{border-color:var(--ink);}
   </div>
 </header>
 
-<main class="w">
+<main class="w app-shell">
+
+  <aside id="sec-cloud" class="cloud-side" hidden>
+    <h2><em>Mes analyses</em></h2>
+    <div class="cloud-sub">Historique sauvegard&eacute; sur ton compte</div>
+    <div class="cloud-save">
+      <input id="cl-name" type="text" placeholder="Nom de l'analyse">
+      <div class="cloud-actions">
+        <button id="cl-save" class="pdfbtn" style="background:var(--ink);color:var(--cardalt);border:none;">Sauvegarder</button>
+        <button id="cl-refresh" class="pdfbtn" title="Actualiser" style="background:none;border:1px solid var(--line);color:var(--ink);">&orarr;</button>
+      </div>
+    </div>
+    <div id="cl-msg" class="cloud-msg"></div>
+    <div id="cl-list" class="cloud-list"></div>
+  </aside>
 
   <section id="sec-upload">
     <div class="shead"><span class="snum ff">I.</span><h2 class="ff">D&eacute;poser le fichier</h2></div>
@@ -348,19 +385,6 @@ input.f:focus{border-color:var(--ink);}
       <div class="rhead"><span class="rnum mono">03</span><h2 class="ff"><em>Distributions</em></h2></div>
       <div class="dchips" id="dchips"></div>
       <div id="histcont"></div>
-    </div>
-
-    <div id="sec-cloud" hidden style="margin-top:32px;padding:18px 20px;background:var(--cardalt);border:1px solid var(--linef);">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
-        <h3 class="ff" style="margin:0;font-size:18px;"><em>Sauvegarder l'analyse</em></h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="cl-name" type="text" placeholder="Nom de l'analyse" style="padding:6px 10px;border:1px solid var(--line);background:white;font-family:inherit;font-size:13px;min-width:180px;"/>
-          <button id="cl-save" class="pdfbtn" style="background:var(--ink);color:var(--cardalt);border:none;padding:7px 14px;cursor:pointer;font-size:12px;">Sauvegarder</button>
-          <button id="cl-refresh" class="pdfbtn" style="background:none;border:1px solid var(--line);padding:7px 12px;cursor:pointer;font-size:12px;">↻</button>
-        </div>
-      </div>
-      <div id="cl-msg" style="font-size:11px;color:var(--muted);margin-bottom:8px;min-height:14px;"></div>
-      <div id="cl-list" style="font-family:'IBM Plex Mono',monospace;font-size:12px;"></div>
     </div>
 
     <div class="method">
@@ -888,21 +912,22 @@ renderAll();
     setTimeout(()=>document.getElementById('sec-results')?.scrollIntoView({behavior:'smooth'}),100);
   };
   const refresh=async()=>{
-    const list=document.getElementById('cl-list');list.innerHTML='Chargement…';
+    const list=document.getElementById('cl-list');list.innerHTML='<span style="color:var(--muted)">Chargement…</span>';
     const{data,error}=await sb.from('analyses').select('id,name,created_at').order('created_at',{ascending:false});
     if(error){list.innerHTML='<span style="color:var(--a1)">Erreur : '+error.message+'</span>';return;}
     if(!data||!data.length){list.innerHTML='<span style="color:var(--muted)">Aucune analyse sauvegardée.</span>';return;}
     list.innerHTML='';
     data.forEach(r=>{
       const row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--linef);';
+      row.className='cloud-item';
       const dt=new Date(r.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});
-      row.innerHTML=`<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.name.replace(/[<>&]/g,'')}</span><span style="color:var(--muted);font-size:11px;">${dt}</span>`;
-      const bO=document.createElement('button');bO.textContent='Ouvrir';bO.style.cssText='background:none;border:1px solid var(--line);padding:4px 10px;cursor:pointer;font-size:11px;font-family:inherit;';
-      const bD=document.createElement('button');bD.textContent='Suppr.';bD.style.cssText='background:none;border:1px solid var(--line);padding:4px 10px;cursor:pointer;font-size:11px;font-family:inherit;color:var(--a1);';
+      row.innerHTML=`<div class="cloud-item-title">${esc(r.name)}</div><div class="cloud-item-date">${dt}</div><div class="cloud-item-actions"></div>`;
+      const actions=row.querySelector('.cloud-item-actions');
+      const bO=document.createElement('button');bO.textContent='Ouvrir';bO.className='cloud-mini';
+      const bD=document.createElement('button');bD.textContent='Suppr.';bD.className='cloud-mini danger';
       bO.onclick=async()=>{const{data:full,error:e}=await sb.from('analyses').select('data').eq('id',r.id).single();if(e){msg('Erreur : '+e.message);return;}restore(full.data);msg('Analyse "'+r.name+'" chargée.');};
       bD.onclick=async()=>{if(!confirm('Supprimer "'+r.name+'" ?'))return;const{error:e}=await sb.from('analyses').delete().eq('id',r.id);if(e){msg('Erreur : '+e.message);return;}refresh();};
-      row.appendChild(bO);row.appendChild(bD);list.appendChild(row);
+      actions.appendChild(bO);actions.appendChild(bD);list.appendChild(row);
     });
   };
   document.getElementById('cl-save').addEventListener('click',async()=>{
