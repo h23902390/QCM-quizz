@@ -2226,7 +2226,7 @@ Contraintes :
   };
 
   const reset = () => {
-    setMode('home'); setQuestions([]); setPages([]); setQuizQuestions([]);
+    setMode('qcm'); setQuestions([]); setPages([]); setQuizQuestions([]);
     setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
     setFilename(''); setError(null); setCurrentDeckId(null);
     setEcosCase(null); setEcosMessages([]); setEcosInput(''); setEcosEvaluation(null); setEcosError(null);
@@ -2697,14 +2697,14 @@ Contraintes :
 
       <header className="border-b" style={{ borderColor: '#d6d0c1', position: 'relative', zIndex: 2, background: '#f6f3ec' }}>
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && reset()}>
-            <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>QCM&nbsp;/ QROC</h1>
-            {mode !== 'home' && filename && (
+          <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && setMode('home')}>
+            <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>Boîte à outils</h1>
+            {mode !== 'home' && mode !== 'qcm' && filename && (
               <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{filename}</span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            {mode !== 'home' && mode !== 'quiz' && (
+            {mode !== 'home' && mode !== 'qcm' && mode !== 'quiz' && (
               <button onClick={reset} className="btn-secondary px-3 py-1.5 text-xs">Nouveau</button>
             )}
             {supabaseEnabled && session && (
@@ -2727,20 +2727,24 @@ Contraintes :
       <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec', position: 'relative', zIndex: 2 }}>
         <TabBar
           tabs={[
+            { key: 'home', label: 'Accueil' },
             { key: 'qcm', label: 'QCM / QROC' },
             { key: 'ecos', label: 'ECOS' },
             { key: 'analyse', label: 'Analyse partiels' },
             { key: 'entretien', label: 'Entretien' },
           ]}
           activeKey={
-            mode === 'ecos' ? 'ecos'
+            mode === 'home' ? 'home'
+            : mode === 'ecos' || mode === 'ecos-results' ? 'ecos'
             : mode === 'analyse' ? 'analyse'
             : mode === 'entretien' ? 'entretien'
             : 'qcm'
           }
           onSelect={(key) => {
-            if (key === 'qcm') {
-              if (mode === 'ecos' || mode === 'analyse' || mode === 'entretien') reset();
+            if (key === 'home') {
+              setMode('home');
+            } else if (key === 'qcm') {
+              if (mode !== 'qcm' && mode !== 'extract' && mode !== 'quiz' && mode !== 'results' && mode !== 'library') reset();
             } else if (key === 'ecos') {
               if (mode !== 'ecos') setMode('ecos');
             } else if (key === 'analyse') {
@@ -2844,6 +2848,87 @@ Contraintes :
 
         {mode === 'home' && (
           <>
+            {/* HOME — présentation de la boîte à outils */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(40px, 6vw, 96px)' }}>
+              <Reveal className="anim-fade-up">
+                <Eyebrow>Boîte à outils — externat médecine</Eyebrow>
+              </Reveal>
+              <Reveal delay={80} className="anim-fade-up" as="h1">
+                <span className="display block mt-5" style={{
+                  fontWeight: 600, fontSize: 'clamp(40px, 7vw, 88px)',
+                  lineHeight: 1.0, letterSpacing: '-0.035em',
+                }}>
+                  Quatre outils,<br />
+                  <span style={{ color: 'var(--c-ink-soft)' }}>une seule discipline.</span>
+                </span>
+              </Reveal>
+              <Reveal delay={160} className="anim-fade-up">
+                <p className="mt-7 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 18, lineHeight: 1.55 }}>
+                  Une suite d'outils que je m'écris à mesure que j'avance dans l'externat.
+                  Chacun résout un problème concret&nbsp;: réviser, simuler, analyser, structurer.
+                </p>
+              </Reveal>
+            </section>
+
+            <div className="section-divider" />
+
+            {/* Les 4 outils */}
+            <section>
+              <Reveal>
+                <Eyebrow>Sommaire</Eyebrow>
+              </Reveal>
+              <div className="grid md:grid-cols-2 gap-5 mt-8">
+                {[
+                  { n: '01', k: 'qcm', t: 'QCM / QROC', d: 'Extraction d\'un PDF de cours corrigé, génération automatique d\'un quiz, sauvegarde des decks et des favoris.' },
+                  { n: '02', k: 'ecos', t: 'ECOS', d: 'Patient simulé par IA, dictée vocale, notation détaillée /20 par section. 132 cas Fac intégrés + import PDF.' },
+                  { n: '03', k: 'analyse', t: 'Analyse partiels', d: 'Lecture rapide de tes partiels passés, repérage des questions récurrentes et des pièges.' },
+                  { n: '04', k: 'entretien', t: 'Entretien', d: 'Dossier patient → entretien guidé. Anamnèse, examen, hypothèses, restitution écrite.' },
+                ].map((c, i) => (
+                  <Reveal key={c.k} delay={80 + i * 80}>
+                    <div
+                      onClick={() => {
+                        if (c.k === 'qcm') reset();
+                        else setMode(c.k);
+                      }}
+                      className="bezel cursor-pointer"
+                      style={{ display: 'block', height: '100%' }}
+                    >
+                      <div className="bezel-inner" style={{ padding: 'clamp(28px, 3vw, 40px)', height: '100%' }}>
+                        <div className="flex items-start justify-between gap-6">
+                          <div className="flex-1">
+                            <div className="mono text-xs mb-5" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{c.n}</div>
+                            <div className="display" style={{
+                              fontWeight: 600,
+                              fontSize: 'clamp(22px, 2.4vw, 30px)',
+                              letterSpacing: '-0.02em', lineHeight: 1.1,
+                            }}>{c.t}</div>
+                            <div className="mt-3 text-sm" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.55 }}>{c.d}</div>
+                          </div>
+                          <span className="cta-orbit shrink-0">
+                            Ouvrir
+                            <span className="orbit-icon"><IconArrowRight size={14} stroke={2} /></span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+            </section>
+
+            <div className="section-divider" />
+
+            {/* Note signature */}
+            <Reveal>
+              <p className="mono text-xs" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                Atelier personnel · Hugo Bette · {new Date().getFullYear()}
+              </p>
+            </Reveal>
+          </>
+        )}
+
+        {mode === 'qcm' && (
+          <>
             {/* Hero : eyebrow + intro typographique */}
             <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)' }}>
               <Reveal className="anim-fade-up">
@@ -2921,41 +3006,6 @@ Contraintes :
 
             <div className="section-divider" />
 
-            {/* Carte ECOS — bezel + CTA orbit */}
-            <section>
-              <Reveal>
-                <Eyebrow>Outil 02 / Simulation clinique</Eyebrow>
-              </Reveal>
-              <Reveal delay={80}>
-                <div
-                  onClick={() => setMode('ecos')}
-                  className="bezel cursor-pointer mt-5"
-                  style={{ display: 'block' }}
-                >
-                  <div className="bezel-inner flex flex-col md:flex-row md:items-center md:justify-between gap-6"
-                    style={{ padding: 'clamp(28px, 3.5vw, 44px)' }}>
-                    <div className="max-w-xl">
-                      <div className="display" style={{
-                        fontWeight: 600,
-                        fontSize: 'clamp(24px, 3vw, 36px)',
-                        letterSpacing: '-0.025em', lineHeight: 1.1,
-                      }}>ECOS — Entraînement</div>
-                      <div className="mt-3 text-sm" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.55 }}>
-                        Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation
-                        détaillée /20 par section.
-                      </div>
-                    </div>
-                    <span className="cta-orbit shrink-0 self-start md:self-auto">
-                      Démarrer
-                      <span className="orbit-icon"><IconArrowRight size={14} stroke={2} /></span>
-                    </span>
-                  </div>
-                </div>
-              </Reveal>
-            </section>
-
-            <div className="section-divider" />
-
             {/* Features — eyebrow + grille épurée */}
             <section>
               <Reveal>
@@ -3004,7 +3054,7 @@ Contraintes :
                   Sélectionne un cas clinique. Tu joues le médecin, l'IA joue le patient.
                 </div>
               </div>
-              <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs"><IconArrowLeft size={12} /> Retour</button>
+              <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs"><IconArrowLeft size={12} /> Accueil</button>
             </div>
 
             {!apiKey && (
