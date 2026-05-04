@@ -203,6 +203,16 @@ const mergeEcosAttempts = (...lists) => {
   return Array.from(byCase.values()).sort((a, b) => attemptTimestamp(b).localeCompare(attemptTimestamp(a)));
 };
 
+const formatEcosAttemptDate = (attempt) => {
+  const ts = attemptTimestamp(attempt);
+  if (!ts) return 'Date inconnue';
+  try {
+    return new Date(ts).toLocaleString('fr-FR');
+  } catch {
+    return 'Date inconnue';
+  }
+};
+
 // ---------- Component ----------
 export default function App() {
   // App state
@@ -754,6 +764,25 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
     setEcosTimeLeft(Number.isFinite(Number(d?.timeLeft)) ? Number(d.timeLeft) : (c.duree || 10) * 60);
     setEcosTimerRunning(false);
     setMode('ecos');
+  };
+
+  const openEcosAttempt = (attempt) => {
+    if (!attempt?.data) return;
+    const d = attempt.data;
+    const foundCase = allEcosCases.find(c => c.id === attempt.case_id || c.id === d.caseId);
+    if (!foundCase) {
+      setEcosError('Cas introuvable pour cette trace.');
+      return;
+    }
+    setEcosCase(foundCase);
+    setEcosMessages(Array.isArray(d.messages) ? d.messages : []);
+    setEcosInput(d.input || '');
+    setEcosEvaluation(d.evaluation || null);
+    setEcosStartedAt(d.startedAt ? new Date(d.startedAt).getTime() : Date.now());
+    setEcosTimeLeft(Number.isFinite(Number(d.timeLeft)) ? Number(d.timeLeft) : (foundCase.duree || 10) * 60);
+    setEcosTimerRunning(false);
+    setEcosSaveState(d.status === 'finished' ? 'Trace enregistrée' : 'Brouillon repris');
+    setMode(d.evaluation ? 'ecos-results' : 'ecos');
   };
 
   const sendEcosMessage = async (textOverride) => {
@@ -2534,6 +2563,44 @@ Contraintes :
               </select>
             </div>
 
+            {ecosAttempts.length > 0 && (
+              <div className="mb-5 p-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                  <div>
+                    <h3 className="display text-lg" style={{ fontWeight: 600 }}>Mes traces ECOS</h3>
+                    <div className="mono text-[10px]" style={{ color: '#6a6a6a' }}>
+                      Brouillons et ECOS terminés restent ici après fermeture.
+                    </div>
+                  </div>
+                  <div className="mono text-[10px]" style={{ color: '#8a8a8a' }}>
+                    {ecosAttempts.length} trace{ecosAttempts.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {ecosAttempts.slice(0, 6).map(attempt => {
+                    const d = attempt.data || {};
+                    const isFinished = d.status === 'finished';
+                    return (
+                      <div key={attempt.case_id} className="flex flex-wrap items-center justify-between gap-3 p-3" style={{ background: '#f6f3ec' }}>
+                        <div>
+                          <div className="text-sm" style={{ fontWeight: 600 }}>{d.caseTitle || attempt.case_id}</div>
+                          <div className="mono text-[10px]" style={{ color: '#6a6a6a' }}>
+                            {isFinished ? 'Terminé' : 'Brouillon'} · {formatEcosAttemptDate(attempt)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => openEcosAttempt(attempt)}
+                          className={isFinished ? 'btn-primary px-3 py-1.5 text-xs' : 'btn-secondary px-3 py-1.5 text-xs'}
+                        >
+                          {isFinished ? <><IconEye size={11} /> Voir la trace</> : <><IconPlay size={11} /> Reprendre</>}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {ecosImportOpen && (
               <div className="p-4 mb-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                 <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Importer un ECOS depuis un PDF</div>
@@ -2688,6 +2755,13 @@ Contraintes :
                     </div>
                   );
                 })()}
+                <button
+                  onClick={() => saveEcosSession('in_progress')}
+                  disabled={ecosEvaluating}
+                  className="btn-secondary px-3 py-1.5 text-xs"
+                >
+                  <IconSave size={11} /> Enregistrer brouillon
+                </button>
                 <button onClick={() => { if (confirm('Abandonner cet ECOS ?')) { saveEcosSession('abandoned'); setEcosTimerRunning(false); setEcosCase(null); setEcosMessages([]); setEcosInput(''); } }}
                   className="btn-secondary px-3 py-1.5 text-xs">Abandonner</button>
                 <button onClick={finishEcos} disabled={ecosEvaluating || ecosMessages.length === 0}
@@ -2813,8 +2887,15 @@ Contraintes :
               <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-3">
                 <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
                   className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
+                <button onClick={() => saveEcosSession('finished', { finishedAt: new Date().toISOString() })}
+                  className="btn-secondary px-4 py-2 text-sm"><IconSave size={12} /> Enregistrer la trace</button>
                 <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
               </div>
+              {ecosSaveState && (
+                <div className="mono text-[10px] mt-3" style={{ color: '#8a8a8a' }}>
+                  {ecosSaveState}
+                </div>
+              )}
             </div>
 
             <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Score par section</h3>
