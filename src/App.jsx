@@ -2698,7 +2698,7 @@ Contraintes :
       <header className="border-b" style={{ borderColor: '#d6d0c1', position: 'relative', zIndex: 2, background: '#f6f3ec' }}>
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && setMode('home')}>
-            <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>Boîte à outils</h1>
+            <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>Boîte à outils médicale</h1>
             {mode !== 'home' && mode !== 'qcm' && filename && (
               <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{filename}</span>
             )}
@@ -2851,7 +2851,7 @@ Contraintes :
             {/* HOME — présentation de la boîte à outils */}
             <section className="section-macro" style={{ paddingTop: 'clamp(40px, 6vw, 96px)' }}>
               <Reveal className="anim-fade-up">
-                <Eyebrow>Boîte à outils — externat médecine</Eyebrow>
+                <Eyebrow>Boîte à outils médicale — externat médecine</Eyebrow>
               </Reveal>
               <Reveal delay={80} className="anim-fade-up" as="h1">
                 <span className="display block mt-5" style={{
