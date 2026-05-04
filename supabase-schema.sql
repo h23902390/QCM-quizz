@@ -26,3 +26,29 @@ create policy "decks_owner_delete" on public.decks
 
 create index if not exists decks_user_created_idx
   on public.decks (user_id, created_at desc);
+
+-- ---------- ECOS cases (synchro multi-appareils) ----------
+create table if not exists public.ecos_cases (
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
+  case_id text not null,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, case_id)
+);
+
+alter table public.ecos_cases enable row level security;
+
+drop policy if exists "ecos_cases_owner_select" on public.ecos_cases;
+drop policy if exists "ecos_cases_owner_insert" on public.ecos_cases;
+drop policy if exists "ecos_cases_owner_update" on public.ecos_cases;
+drop policy if exists "ecos_cases_owner_delete" on public.ecos_cases;
+
+create policy "ecos_cases_owner_select" on public.ecos_cases
+  for select using (auth.uid() = user_id);
+create policy "ecos_cases_owner_insert" on public.ecos_cases
+  for insert with check (auth.uid() = user_id);
+create policy "ecos_cases_owner_update" on public.ecos_cases
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "ecos_cases_owner_delete" on public.ecos_cases
+  for delete using (auth.uid() = user_id);

@@ -36,6 +36,30 @@ export async function deleteDeck(id) {
   if (error) throw error;
 }
 
+// ---------- ECOS cases ----------
+export async function listEcosCases() {
+  const { data, error } = await supabase
+    .from('ecos_cases')
+    .select('case_id, data')
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data || []).map(r => r.data);
+}
+
+export async function upsertEcosCases(cases) {
+  if (!cases || cases.length === 0) return;
+  const rows = cases.map(c => ({ case_id: c.id, data: c, updated_at: new Date().toISOString() }));
+  const { error } = await supabase
+    .from('ecos_cases')
+    .upsert(rows, { onConflict: 'user_id,case_id' });
+  if (error) throw error;
+}
+
+export async function deleteEcosCase(caseId) {
+  const { error } = await supabase.from('ecos_cases').delete().eq('case_id', caseId);
+  if (error) throw error;
+}
+
 // ---------- API key (user metadata) ----------
 export async function saveApiKey(key) {
   const { error } = await supabase.auth.updateUser({ data: { openai_key: key } });

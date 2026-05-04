@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
+  listEcosCases, upsertEcosCases, deleteEcosCase as deleteEcosCaseRemote,
 } from './lib/supabase';
 import { ECOS_CASES } from './ecosCases';
 import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
@@ -420,6 +421,7 @@ Contraintes :
     if (!ecosImportPreview) return;
     const next = [...customCases, ecosImportPreview];
     persistCustomCases(next);
+    if (session) upsertEcosCases([ecosImportPreview]).catch(e => console.warn('upsertEcosCases', e));
     setEcosImportPreview(null);
     setEcosImportFilename('');
     setEcosImportOpen(false);
@@ -429,6 +431,7 @@ Contraintes :
   const deleteCustomCase = (id) => {
     if (!confirm('Supprimer ce cas ?')) return;
     persistCustomCases(customCases.filter(c => c.id !== id));
+    if (session) deleteEcosCaseRemote(id).catch(e => console.warn('deleteEcosCase', e));
   };
 
   const convertBuiltInEcos = async () => {
@@ -450,6 +453,7 @@ Contraintes :
         obj.sourceFile = item.filename;
         acc = [...acc, obj];
         persistCustomCases(acc);
+        if (session) { try { await upsertEcosCases([obj]); } catch (e) { console.warn('upsertEcosCases', e); } }
       } catch (e) {
         console.warn('Échec conversion', item.filename, e.message);
       }
@@ -512,6 +516,25 @@ Contraintes :
       try { localStorage.setItem('openai_key', meta.openai_key); } catch {}
     }
     listDecks().then(setDecks).catch(e => console.warn('listDecks', e));
+    // Synchro ECOS : fusion local <-> Supabase
+    (async () => {
+      try {
+        const remote = await listEcosCases();
+        const remoteIds = new Set(remote.map(c => c.id));
+        const localOnly = customCases.filter(c => c && c.id && !remoteIds.has(c.id));
+        if (localOnly.length > 0) {
+          try { await upsertEcosCases(localOnly); } catch (e) { console.warn('upsertEcosCases', e); }
+        }
+        const byId = new Map();
+        for (const c of remote) if (c && c.id) byId.set(c.id, c);
+        for (const c of localOnly) byId.set(c.id, c);
+        const merged = Array.from(byId.values());
+        setCustomCases(merged);
+        try { localStorage.setItem('ecos_custom_cases', JSON.stringify(merged)); } catch {}
+      } catch (e) {
+        console.warn('listEcosCases', e);
+      }
+    })();
   }, [session]);
 
   const persistKey = (k) => {
