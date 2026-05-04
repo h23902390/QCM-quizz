@@ -3,6 +3,8 @@ import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
 } from './lib/supabase';
+import { ECOS_CASES } from './ecosCases';
+import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
 
 // ============================================================
 //  EXTRACTEUR & QUIZ DE QCM/QROC — V2
@@ -96,6 +98,381 @@ export default function App() {
   const [decks, setDecks] = useState([]);
   const [currentDeckId, setCurrentDeckId] = useState(null);
   const [savingDeck, setSavingDeck] = useState(false);
+
+  // ---------- ECOS state ----------
+  const [ecosCase, setEcosCase] = useState(null); // cas sélectionné
+  const [ecosMessages, setEcosMessages] = useState([]); // [{role, content}]
+  const [ecosInput, setEcosInput] = useState('');
+  const [ecosSending, setEcosSending] = useState(false);
+  const [ecosRecording, setEcosRecording] = useState(false);
+  const [ecosTranscribing, setEcosTranscribing] = useState(false);
+  const [ecosEvaluating, setEcosEvaluating] = useState(false);
+  const [ecosEvaluation, setEcosEvaluation] = useState(null);
+  const [ecosError, setEcosError] = useState(null);
+  const [ecosStartedAt, setEcosStartedAt] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const ecosScrollRef = useRef(null);
+
+  // Timer ECOS
+  const [ecosTimeLeft, setEcosTimeLeft] = useState(0); // secondes
+  const [ecosTimerRunning, setEcosTimerRunning] = useState(false);
+  const ecosTimerRef = useRef(null);
+  const finishEcosRef = useRef(null);
+
+  // Cas custom (importés depuis PDF, ou convertis depuis les PDF intégrés)
+  const [customCases, setCustomCases] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ecos_custom_cases') || '[]'); } catch { return []; }
+  });
+  const [ecosImportOpen, setEcosImportOpen] = useState(false);
+  const [ecosImportProcessing, setEcosImportProcessing] = useState(false);
+  const [ecosImportError, setEcosImportError] = useState(null);
+  const [ecosImportPreview, setEcosImportPreview] = useState(null);
+  const [ecosImportFilename, setEcosImportFilename] = useState('');
+  const [ecosBuiltInConverting, setEcosBuiltInConverting] = useState(false);
+  const [ecosBuiltInProgress, setEcosBuiltInProgress] = useState({ current: 0, total: 0 });
+  const ecosImportInputRef = useRef(null);
+
+  const persistCustomCases = (arr) => {
+    setCustomCases(arr);
+    try { localStorage.setItem('ecos_custom_cases', JSON.stringify(arr)); } catch {}
+  };
+
+  const playBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.2;
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start();
+      setTimeout(() => { osc.frequency.value = 660; }, 250);
+      setTimeout(() => { osc.stop(); ctx.close(); }, 600);
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (ecosScrollRef.current) ecosScrollRef.current.scrollTop = ecosScrollRef.current.scrollHeight;
+  }, [ecosMessages, ecosSending]);
+
+  // Timer tick
+  useEffect(() => {
+    if (!ecosTimerRunning) return;
+    const id = setInterval(() => {
+      setEcosTimeLeft(t => {
+        if (t <= 1) {
+          clearInterval(id);
+          setEcosTimerRunning(false);
+          playBeep();
+          if (finishEcosRef.current) {
+            try { finishEcosRef.current(); } catch {}
+          }
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    ecosTimerRef.current = id;
+    return () => clearInterval(id);
+  }, [ecosTimerRunning]);
+
+  const startEcos = (c) => {
+    setEcosCase(c);
+    setEcosMessages([]);
+    setEcosInput('');
+    setEcosError(null);
+    setEcosEvaluation(null);
+    setEcosStartedAt(Date.now());
+    setEcosTimeLeft((c.duree || 10) * 60);
+    setEcosTimerRunning(false);
+    setMode('ecos');
+  };
+
+  const sendEcosMessage = async (textOverride) => {
+    const txt = (textOverride ?? ecosInput).trim();
+    if (!txt || !ecosCase || ecosSending) return;
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    setEcosError(null);
+    const newMessages = [...ecosMessages, { role: 'user', content: txt }];
+    setEcosMessages(newMessages);
+    setEcosInput('');
+    setEcosSending(true);
+    try {
+      const body = {
+        model,
+        messages: [
+          { role: 'system', content: ecosCase.briefPatient },
+          ...newMessages,
+        ],
+        temperature: 0.7,
+      };
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const reply = data.choices?.[0]?.message?.content || '...';
+      setEcosMessages(m => [...m, { role: 'assistant', content: reply }]);
+    } catch (e) {
+      setEcosError(e.message);
+      setEcosMessages(m => m.slice(0, -1));
+      setEcosInput(txt);
+    } finally {
+      setEcosSending(false);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    setEcosError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        if (blob.size === 0) { setEcosError('Enregistrement vide.'); return; }
+        setEcosTranscribing(true);
+        try {
+          const ext = (mr.mimeType || 'audio/webm').includes('mp4') ? 'mp4' : 'webm';
+          const fd = new FormData();
+          fd.append('file', blob, `audio.${ext}`);
+          fd.append('model', 'whisper-1');
+          fd.append('language', 'fr');
+          const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}` },
+            body: fd,
+          });
+          if (!resp.ok) {
+            const t = await resp.text();
+            throw new Error(`Whisper ${resp.status} : ${t.slice(0, 200)}`);
+          }
+          const data = await resp.json();
+          const text = (data.text || '').trim();
+          if (text) {
+            setEcosInput(prev => (prev ? prev + ' ' : '') + text);
+          }
+        } catch (e) {
+          setEcosError(e.message);
+        } finally {
+          setEcosTranscribing(false);
+        }
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setEcosRecording(true);
+    } catch (e) {
+      setEcosError('Accès micro refusé : ' + e.message);
+    }
+  };
+
+  const stopRecording = () => {
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+    setEcosRecording(false);
+  };
+
+  const finishEcos = async () => {
+    if (!ecosCase || ecosEvaluating) return;
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (ecosMessages.length === 0) { setEcosError('Aucune interaction à évaluer.'); return; }
+    setEcosTimerRunning(false);
+    setEcosError(null);
+    setEcosEvaluating(true);
+    try {
+      const transcript = ecosMessages.map(m => `${m.role === 'user' ? 'CANDIDAT' : 'PATIENT'}: ${m.content}`).join('\n\n');
+      const grille = ecosCase.grilleCorrection.map((it, i) => `${i + 1}. [${it.section}] ${it.critere} (/${it.points})`).join('\n');
+      const totalPoints = ecosCase.grilleCorrection.reduce((s, it) => s + it.points, 0);
+      const body = {
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: `Tu es un examinateur ECOS rigoureux mais bienveillant en médecine. Tu évalues la performance d'un candidat sur un cas clinique simulé. Réponds STRICTEMENT en JSON valide avec la structure : {"items":[{"section":"...","critere":"...","pointsMax":n,"pointsObtenus":n,"commentaire":"..."},...],"feedbackGlobal":"...","pointsForts":["..."],"axesAmelioration":["..."]}. Sois juste : note 0 si critère non abordé, note partielle si abordé incomplètement, note maxi si bien fait. Total /${totalPoints}, à ramener à /20.`,
+          },
+          {
+            role: 'user',
+            content: `CAS : ${ecosCase.titre} (${ecosCase.specialite})\n\nCONSIGNE CANDIDAT :\n${ecosCase.consigneCandidat}\n\nGRILLE DE CORRECTION (total ${totalPoints} points) :\n${grille}\n\nTRANSCRIPT DE LA CONSULTATION :\n${transcript}\n\nÉvalue chaque item de la grille en justifiant brièvement, puis fournis un feedback global, points forts et axes d'amélioration.`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      };
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const raw = data.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(raw);
+      setEcosEvaluation(parsed);
+      setMode('ecos-results');
+    } catch (e) {
+      setEcosError('Erreur évaluation : ' + e.message);
+    } finally {
+      setEcosEvaluating(false);
+    }
+  };
+
+  // Garder une référence stable vers finishEcos pour le timer
+  useEffect(() => { finishEcosRef.current = finishEcos; });
+
+  // ----- Importer un ECOS depuis un PDF -----
+  const extractPdfTextFromFile = async (file) => {
+    if (!window.pdfjsLib) throw new Error('PDF.js non chargé');
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const out = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      const { text } = reconstructText(tc);
+      out.push(text);
+    }
+    return out.join('\n\n');
+  };
+
+  const convertRawToCaseViaGPT = async (rawText, sourceLabel) => {
+    if (!apiKey) throw new Error('Configure ta clé API OpenAI dans les Réglages.');
+    const sys = `Tu transformes une grille ECOS extraite d'un PDF (texte brut, parfois bruité) en un objet JSON STRICT conforme au format suivant, utilisé par une application de simulation médicale :
+{
+  "id": "string-kebab-case-unique",
+  "titre": "string court",
+  "specialite": "string (ex: 'Cardiologie / Urgences')",
+  "duree": number (minutes, défaut 8),
+  "consigneCandidat": "string markdown : contexte, mission, durée — ce que voit l'étudiant",
+  "briefPatient": "string : prompt système complet pour faire incarner le patient simulé à un LLM (TUTOIE le LLM, donne-lui un dossier détaillé à révéler progressivement, interdit de jouer l'examinateur ou de donner le diagnostic)",
+  "grilleCorrection": [{"section":"string","critere":"string","points":number}, ...]
+}
+Contraintes :
+- Les points de grilleCorrection doivent totaliser EXACTEMENT 20.
+- Au moins 6 items dans grilleCorrection.
+- Si le PDF ne donne pas de "brief patient", invente-le de façon cohérente avec la grille.
+- Renvoie UNIQUEMENT l'objet JSON, sans texte autour.`;
+    const usr = `Source : ${sourceLabel}\n\nTEXTE BRUT EXTRAIT DU PDF :\n${rawText.slice(0, 18000)}`;
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: usr },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    const raw = data.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(raw);
+    // Normalise
+    if (!parsed.id) parsed.id = 'ecos-imp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    if (!parsed.duree) parsed.duree = 8;
+    if (!Array.isArray(parsed.grilleCorrection)) parsed.grilleCorrection = [];
+    return parsed;
+  };
+
+  const handleEcosImportFile = async (f) => {
+    if (!f) return;
+    if (!/\.pdf$/i.test(f.name)) { setEcosImportError('PDF requis.'); return; }
+    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    setEcosImportError(null);
+    setEcosImportPreview(null);
+    setEcosImportFilename(f.name);
+    setEcosImportProcessing(true);
+    try {
+      const txt = await extractPdfTextFromFile(f);
+      const obj = await convertRawToCaseViaGPT(txt, f.name);
+      obj.source = 'perso';
+      setEcosImportPreview(obj);
+    } catch (e) {
+      setEcosImportError(e.message);
+    } finally {
+      setEcosImportProcessing(false);
+    }
+  };
+
+  const saveImportedCase = () => {
+    if (!ecosImportPreview) return;
+    const next = [...customCases, ecosImportPreview];
+    persistCustomCases(next);
+    setEcosImportPreview(null);
+    setEcosImportFilename('');
+    setEcosImportOpen(false);
+    if (ecosImportInputRef.current) ecosImportInputRef.current.value = '';
+  };
+
+  const deleteCustomCase = (id) => {
+    if (!confirm('Supprimer ce cas ?')) return;
+    persistCustomCases(customCases.filter(c => c.id !== id));
+  };
+
+  const convertBuiltInEcos = async () => {
+    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (ecosBuiltInConverting) return;
+    setEcosImportError(null);
+    setEcosBuiltInConverting(true);
+    const existingFlags = new Set(customCases.filter(c => c.source === 'fac').map(c => c.sourceFile));
+    const todo = ECOS_BUILTIN_RAW.filter(r => !existingFlags.has(r.filename) && r.rawText && r.rawText.length > 500);
+    setEcosBuiltInProgress({ current: 0, total: todo.length });
+    let acc = [...customCases];
+    let i = 0;
+    for (const item of todo) {
+      i++;
+      setEcosBuiltInProgress({ current: i, total: todo.length });
+      try {
+        const obj = await convertRawToCaseViaGPT(item.rawText, item.filename);
+        obj.source = 'fac';
+        obj.sourceFile = item.filename;
+        acc = [...acc, obj];
+        persistCustomCases(acc);
+      } catch (e) {
+        console.warn('Échec conversion', item.filename, e.message);
+      }
+    }
+    setEcosBuiltInConverting(false);
+  };
+
+  const ecosScore = useMemo(() => {
+    if (!ecosEvaluation || !ecosCase) return null;
+    const items = ecosEvaluation.items || [];
+    const total = ecosCase.grilleCorrection.reduce((s, it) => s + it.points, 0);
+    const obtenu = items.reduce((s, it) => s + (Number(it.pointsObtenus) || 0), 0);
+    const sur20 = total > 0 ? Math.round((obtenu / total) * 20 * 10) / 10 : 0;
+    // Regroupement par section
+    const bySection = {};
+    items.forEach(it => {
+      const k = it.section || 'Autre';
+      if (!bySection[k]) bySection[k] = { obtenu: 0, max: 0 };
+      bySection[k].obtenu += Number(it.pointsObtenus) || 0;
+      bySection[k].max += Number(it.pointsMax) || 0;
+    });
+    return { obtenu, total, sur20, bySection };
+  }, [ecosEvaluation, ecosCase]);
 
   // ---------- Charge libs PDF/jsPDF depuis CDN ----------
   useEffect(() => {
@@ -757,6 +1134,8 @@ export default function App() {
     setMode('home'); setQuestions([]); setPages([]); setQuizQuestions([]);
     setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
     setFilename(''); setError(null); setCurrentDeckId(null);
+    setEcosCase(null); setEcosMessages([]); setEcosInput(''); setEcosEvaluation(null); setEcosError(null);
+    if (ecosRecording) { try { stopRecording(); } catch {} }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -971,6 +1350,20 @@ export default function App() {
               </div>
             )}
 
+            <div
+              onClick={() => setMode('ecos')}
+              className="cursor-pointer mt-6 p-6 border flex items-center justify-between gap-6"
+              style={{ borderColor: '#1a1a1a', background: '#fff' }}
+            >
+              <div>
+                <div className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Entraînement</div>
+                <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                  Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation détaillée /20.
+                </div>
+              </div>
+              <div className="mono text-sm" style={{ color: '#b54125' }}>→</div>
+            </div>
+
             <div className="grid md:grid-cols-3 gap-6 mt-10">
               {[
                 { t: 'Auto-correction', d: 'Détection des bonnes réponses par analyse de la couleur du texte (vert = correct).' },
@@ -980,6 +1373,344 @@ export default function App() {
                 <div key={i} className="p-5 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div className="display text-lg mb-1" style={{ fontWeight: 600 }}>{c.t}</div>
                   <div className="text-sm" style={{ color: '#5a5a5a' }}>{c.d}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {mode === 'ecos' && !ecosCase && (
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
+              <div>
+                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Choix du cas</h2>
+                <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
+                  Sélectionne un cas clinique. Tu joues le médecin, l'IA joue le patient.
+                </div>
+              </div>
+              <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs">← Retour</button>
+            </div>
+
+            {!apiKey && (
+              <div className="p-4 mb-4 text-sm" style={{ background: '#fff8e0', borderLeft: '3px solid #c4a84d', color: '#5a4a10' }}>
+                Aucune clé OpenAI configurée. Ouvre les <button onClick={() => setShowSettings(true)} className="underline">Réglages</button> pour la renseigner avant de démarrer un ECOS.
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button onClick={() => { setEcosImportOpen(v => !v); setEcosImportError(null); }}
+                className="btn-secondary px-3 py-1.5 text-xs">
+                {ecosImportOpen ? 'Fermer l\'import' : '+ Importer un ECOS (PDF)'}
+              </button>
+              <button onClick={convertBuiltInEcos} disabled={ecosBuiltInConverting || !apiKey}
+                className="btn-secondary px-3 py-1.5 text-xs">
+                {ecosBuiltInConverting
+                  ? `Conversion ${ecosBuiltInProgress.current}/${ecosBuiltInProgress.total}…`
+                  : `Convertir les ${ECOS_BUILTIN_RAW.length} ECOS intégrés (Fac)`}
+              </button>
+            </div>
+
+            {ecosImportOpen && (
+              <div className="p-4 mb-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Importer un ECOS depuis un PDF</div>
+                <input
+                  ref={ecosImportInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => handleEcosImportFile(e.target.files?.[0])}
+                  disabled={ecosImportProcessing}
+                  className="text-sm"
+                />
+                {ecosImportFilename && <div className="mono text-xs mt-2" style={{ color: '#5a5a5a' }}>Fichier : {ecosImportFilename}</div>}
+                {ecosImportProcessing && <div className="text-xs mt-2 mono" style={{ color: '#5a5a5a' }}>Extraction + génération via GPT…</div>}
+                {ecosImportError && <div className="text-xs mt-2" style={{ color: '#b54125' }}>{ecosImportError}</div>}
+                {ecosImportPreview && (
+                  <div className="mt-3 p-3" style={{ background: '#f6f3ec' }}>
+                    <div className="display text-base mb-1" style={{ fontWeight: 600 }}>{ecosImportPreview.titre}</div>
+                    <div className="mono text-xs mb-2" style={{ color: '#b54125' }}>{ecosImportPreview.specialite} · {ecosImportPreview.duree} min</div>
+                    <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
+                      Grille : {ecosImportPreview.grilleCorrection.length} items · {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+                    </div>
+                    <details className="text-xs">
+                      <summary className="cursor-pointer">Aperçu consigne candidat</summary>
+                      <div className="mt-2 whitespace-pre-wrap" style={{ color: '#3a3a3a' }}>{ecosImportPreview.consigneCandidat}</div>
+                    </details>
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={saveImportedCase} className="btn-primary px-3 py-1.5 text-xs">Enregistrer dans ma banque</button>
+                      <button onClick={() => setEcosImportPreview(null)} className="btn-secondary px-3 py-1.5 text-xs">Annuler</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {ECOS_CASES.map(c => (
+                <div key={c.id} className="p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
+                  onClick={() => startEcos(c)}>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
+                    <div className="mono text-xs" style={{ color: '#8a8a8a' }}>{c.duree} min</div>
+                  </div>
+                  <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
+                  <div className="text-xs" style={{ color: '#5a5a5a' }}>
+                    Grille : {c.grilleCorrection.length} items · {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
+                  </div>
+                </div>
+              ))}
+              {customCases.map(c => (
+                <div key={c.id} className="p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                  <div onClick={() => startEcos(c)} className="cursor-pointer">
+                    <div className="flex items-baseline justify-between mb-2 gap-2">
+                      <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
+                      <div className="mono text-xs" style={{ color: '#8a8a8a' }}>{c.duree} min</div>
+                    </div>
+                    <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
+                    <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
+                      Grille : {(c.grilleCorrection || []).length} items · {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="mono text-[10px] px-2 py-0.5" style={{
+                      background: c.source === 'fac' ? '#e7eede' : '#fff0d6',
+                      color: c.source === 'fac' ? '#3a5a20' : '#7a5210',
+                      border: '1px solid ' + (c.source === 'fac' ? '#b8c8a0' : '#dfc88a'),
+                    }}>{c.source === 'fac' ? 'Fac' : 'Perso'}</span>
+                    <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
+                      className="text-xs underline" style={{ color: '#b54125' }}>Supprimer</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {mode === 'ecos' && ecosCase && (
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-4 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
+              <div>
+                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>{ecosCase.titre}</h2>
+                <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
+                  {ecosCase.specialite} · {ecosCase.duree} min
+                </div>
+              </div>
+              <div className="flex gap-2 items-center">
+                {(() => {
+                  const mm = String(Math.floor(ecosTimeLeft / 60)).padStart(2, '0');
+                  const ss = String(ecosTimeLeft % 60).padStart(2, '0');
+                  let color = '#1a1a1a';
+                  if (ecosTimeLeft <= 30) color = '#b54125';
+                  else if (ecosTimeLeft <= 120) color = '#d97706';
+                  return (
+                    <div className="flex items-center gap-2">
+                      <div className="mono text-xl px-3 py-1" style={{
+                        color, fontWeight: 600,
+                        background: '#fff', border: '1px solid #d6d0c1',
+                        minWidth: 90, textAlign: 'center',
+                      }}>{mm}:{ss}</div>
+                      <button
+                        onClick={() => setEcosTimerRunning(r => !r)}
+                        disabled={ecosTimeLeft === 0 || ecosEvaluating}
+                        className="btn-secondary px-3 py-1.5 text-xs">
+                        {ecosTimerRunning ? '⏸ Pause' : (ecosTimeLeft === (ecosCase.duree || 10) * 60 ? '▶ Démarrer' : '▶ Reprendre')}
+                      </button>
+                    </div>
+                  );
+                })()}
+                <button onClick={() => { if (confirm('Abandonner cet ECOS ?')) { setEcosTimerRunning(false); setEcosCase(null); setEcosMessages([]); } }}
+                  className="btn-secondary px-3 py-1.5 text-xs">Abandonner</button>
+                <button onClick={finishEcos} disabled={ecosEvaluating || ecosMessages.length === 0}
+                  className="btn-primary px-4 py-1.5 text-xs">
+                  {ecosEvaluating ? 'Évaluation…' : 'Terminer l\'ECOS →'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="md:col-span-1 p-5 border self-start" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Consigne candidat</div>
+                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{ecosCase.consigneCandidat}</div>
+              </div>
+
+              <div className="md:col-span-2 border flex flex-col" style={{ borderColor: '#d6d0c1', background: '#fff', minHeight: '60vh' }}>
+                <div ref={ecosScrollRef} className="flex-1 overflow-y-auto scrollbar p-4 space-y-3" style={{ maxHeight: '60vh' }}>
+                  {ecosMessages.length === 0 && (
+                    <div className="text-sm italic" style={{ color: '#8a8a8a' }}>
+                      Le patient attend. Commence ton interrogatoire (présentation, motif, anamnèse…).
+                    </div>
+                  )}
+                  {ecosMessages.map((m, i) => (
+                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className="max-w-[85%] p-3 text-sm" style={{
+                        background: m.role === 'user' ? '#1a1a1a' : '#f6f3ec',
+                        color: m.role === 'user' ? '#f6f3ec' : '#1a1a1a',
+                        borderRadius: 4, whiteSpace: 'pre-wrap',
+                      }}>
+                        <div className="mono text-xs mb-1" style={{ opacity: 0.6 }}>
+                          {m.role === 'user' ? 'Vous (médecin)' : 'Patient'}
+                        </div>
+                        {m.content}
+                      </div>
+                    </div>
+                  ))}
+                  {ecosSending && (
+                    <div className="flex justify-start">
+                      <div className="p-3 text-sm italic" style={{ background: '#f6f3ec', color: '#8a8a8a', borderRadius: 4 }}>
+                        Le patient réfléchit…
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t p-3" style={{ borderColor: '#d6d0c1' }}>
+                  {ecosError && (
+                    <div className="text-xs mb-2" style={{ color: '#b54125' }}>{ecosError}</div>
+                  )}
+                  {ecosTranscribing && (
+                    <div className="text-xs mb-2 mono" style={{ color: '#5a5a5a' }}>Transcription en cours…</div>
+                  )}
+                  <div className="flex gap-2 items-end">
+                    <textarea
+                      value={ecosInput}
+                      onChange={e => setEcosInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          sendEcosMessage();
+                        }
+                      }}
+                      placeholder={ecosRecording ? 'Enregistrement…' : 'Pose ta question au patient (Entrée pour envoyer, Maj+Entrée = retour à la ligne)'}
+                      rows={2}
+                      className="input-field flex-1"
+                      disabled={ecosSending || ecosRecording}
+                      style={{ resize: 'vertical' }}
+                    />
+                    <div className="flex flex-col gap-2">
+                      {!ecosRecording ? (
+                        <button onClick={startRecording} disabled={ecosSending || ecosTranscribing}
+                          title="Dicter (Whisper)"
+                          className="btn-secondary px-3 py-2 text-sm">🎤</button>
+                      ) : (
+                        <button onClick={stopRecording}
+                          className="px-3 py-2 text-sm" style={{ background: '#b54125', color: '#fff', border: '1px solid #b54125' }}>
+                          ■ Stop
+                        </button>
+                      )}
+                      <button onClick={() => sendEcosMessage()}
+                        disabled={!ecosInput.trim() || ecosSending || ecosRecording}
+                        className="btn-primary px-3 py-2 text-sm">Envoyer</button>
+                    </div>
+                  </div>
+                  {ecosRecording && (
+                    <div className="text-xs mt-2 mono flex items-center gap-2" style={{ color: '#b54125' }}>
+                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#b54125' }} />
+                      Enregistrement en cours…
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {mode === 'ecos-results' && ecosCase && ecosEvaluation && ecosScore && (
+          <>
+            <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
+              <div className="mono text-xs mb-2" style={{ color: '#8a8a8a' }}>
+                {ecosCase.titre} · {ecosCase.specialite}
+              </div>
+              <div className="display text-5xl mb-2" style={{ fontWeight: 600 }}>
+                {ecosScore.sur20} / 20
+              </div>
+              <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                {ecosScore.obtenu} / {ecosScore.total} points · {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} %
+              </div>
+              <div className="flex justify-center gap-2 mt-6">
+                <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
+                  className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
+                <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
+              </div>
+            </div>
+
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Score par section</h3>
+            <div className="space-y-3 mb-8">
+              {Object.entries(ecosScore.bySection).map(([section, s]) => {
+                const pct = s.max > 0 ? (s.obtenu / s.max) * 100 : 0;
+                return (
+                  <div key={section}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>{section}</span>
+                      <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{s.obtenu} / {s.max}</span>
+                    </div>
+                    <div className="h-2" style={{ background: '#d6d0c1' }}>
+                      <div className="h-full" style={{
+                        width: `${pct}%`,
+                        background: pct >= 75 ? '#6b9d4d' : pct >= 50 ? '#c4a84d' : '#b54125',
+                        transition: 'width .3s',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {ecosEvaluation.feedbackGlobal && (
+              <div className="p-4 mb-6" style={{ background: '#fff', borderLeft: '3px solid #1a1a1a' }}>
+                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Feedback global</div>
+                <div className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{ecosEvaluation.feedbackGlobal}</div>
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4 mb-8">
+              {Array.isArray(ecosEvaluation.pointsForts) && ecosEvaluation.pointsForts.length > 0 && (
+                <div className="p-4" style={{ background: '#e6f3e0', borderLeft: '3px solid #6b9d4d' }}>
+                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#2d5a1a' }}>Points forts</div>
+                  <ul className="text-sm space-y-1" style={{ color: '#2d5a1a' }}>
+                    {ecosEvaluation.pointsForts.map((p, i) => <li key={i}>• {p}</li>)}
+                  </ul>
+                </div>
+              )}
+              {Array.isArray(ecosEvaluation.axesAmelioration) && ecosEvaluation.axesAmelioration.length > 0 && (
+                <div className="p-4" style={{ background: '#f8e0d6', borderLeft: '3px solid #b54125' }}>
+                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#6b1f0a' }}>Axes d'amélioration</div>
+                  <ul className="text-sm space-y-1" style={{ color: '#6b1f0a' }}>
+                    {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>• {p}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Détail item par item</h3>
+            <div className="space-y-2 mb-8">
+              {(ecosEvaluation.items || []).map((it, i) => {
+                const max = Number(it.pointsMax) || 0;
+                const obt = Number(it.pointsObtenus) || 0;
+                const ratio = max > 0 ? obt / max : 0;
+                const color = ratio >= 0.75 ? '#6b9d4d' : ratio >= 0.5 ? '#c4a84d' : '#b54125';
+                return (
+                  <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff', borderLeftWidth: 3, borderLeftColor: color }}>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-sm"><strong>{it.section}</strong> — {it.critere}</span>
+                      <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{obt} / {max}</span>
+                    </div>
+                    {it.commentaire && <div className="text-xs italic" style={{ color: '#5a5a5a' }}>{it.commentaire}</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Transcript</h3>
+            <div className="space-y-2 mb-8">
+              {ecosMessages.map((m, i) => (
+                <div key={i} className="p-3 text-sm" style={{
+                  background: m.role === 'user' ? '#fff' : '#f6f3ec',
+                  borderLeft: `3px solid ${m.role === 'user' ? '#1a1a1a' : '#b8b09c'}`,
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  <div className="mono text-xs mb-1" style={{ color: '#8a8a8a' }}>
+                    {m.role === 'user' ? 'Candidat' : 'Patient'}
+                  </div>
+                  {m.content}
                 </div>
               ))}
             </div>
