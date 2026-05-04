@@ -3,6 +3,8 @@ import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
   listEcosCases, upsertEcosCases, deleteEcosCase as deleteEcosCaseRemote,
+  uploadEntretien, listEntretiens, updateEntretien, deleteEntretien,
+  purgeExpiredEntretiens, downloadEntretienBlob,
 } from './lib/supabase';
 import { ECOS_CASES } from './ecosCases';
 import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
@@ -146,6 +148,10 @@ export default function App() {
   const [entError, setEntError] = useState(null);
   const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'étudiant
   const [entProgress, setEntProgress] = useState({ current: 0, total: 0 });
+  const [entRecordId, setEntRecordId] = useState(null); // id de la ligne entretiens en cours
+  const [entHistory, setEntHistory] = useState([]); // historique 24h
+  const [entHistoryLoading, setEntHistoryLoading] = useState(false);
+  const [entUploading, setEntUploading] = useState(false);
   const entMRRef = useRef(null);
   const entChunksRef = useRef([]);
   const entStreamRef = useRef(null);
@@ -184,7 +190,77 @@ export default function App() {
     setEntNote('');
     setEntError(null);
     setEntProgress({ current: 0, total: 0 });
+    setEntRecordId(null);
+    setEntContext('');
     entChunksRef.current = [];
+  };
+
+  // Upload Supabase d'un blob audio (auto si connecté)
+  const uploadEntretienToSupabase = async (blob, filename, durationMs) => {
+    if (!supabaseEnabled || !session) return null;
+    setEntUploading(true);
+    try {
+      const row = await uploadEntretien({ blob, filename, durationMs });
+      setEntRecordId(row.id);
+      // recharge la liste
+      try { setEntHistory(await listEntretiens()); } catch {}
+      return row;
+    } catch (e) {
+      setEntError('Stockage Supabase : ' + e.message);
+      return null;
+    } finally {
+      setEntUploading(false);
+    }
+  };
+
+  const refreshEntHistory = async () => {
+    if (!supabaseEnabled || !session) { setEntHistory([]); return; }
+    setEntHistoryLoading(true);
+    try {
+      try { await purgeExpiredEntretiens(); } catch (e) { console.warn('purge', e); }
+      const rows = await listEntretiens();
+      setEntHistory(rows);
+    } catch (e) {
+      console.warn('listEntretiens', e);
+    } finally {
+      setEntHistoryLoading(false);
+    }
+  };
+
+  // Charge l'historique quand on entre dans l'onglet Entretien (et qu'on est connecté)
+  useEffect(() => {
+    if (mode === 'entretien' && supabaseEnabled && session) {
+      refreshEntHistory();
+    }
+  }, [mode, session]);
+
+  const restoreEntretien = async (row) => {
+    setEntError(null);
+    try {
+      if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
+      const blob = await downloadEntretienBlob(row.storage_path);
+      const url = URL.createObjectURL(blob);
+      setEntAudioBlob(blob);
+      setEntAudioUrl(url);
+      setEntAudioName(row.filename || 'audio.webm');
+      setEntTranscript(row.transcript || '');
+      setEntNote(row.note || '');
+      setEntContext(row.context || '');
+      setEntRecordId(row.id);
+      setEntStep(row.note ? 'done' : (row.transcript ? 'transcribed' : 'have-audio'));
+    } catch (e) {
+      setEntError('Restauration : ' + e.message);
+    }
+  };
+
+  const deleteEntretienRow = async (row) => {
+    try {
+      await deleteEntretien(row.id, row.storage_path);
+      setEntHistory(h => h.filter(r => r.id !== row.id));
+      if (entRecordId === row.id) resetEntretien();
+    } catch (e) {
+      setEntError('Suppression : ' + e.message);
+    }
   };
 
   const startEntRecording = async () => {
@@ -214,11 +290,14 @@ export default function App() {
         if (blob.size === 0) { setEntError('Enregistrement vide.'); setEntRecording(false); return; }
         const url = URL.createObjectURL(blob);
         const ext = type.includes('mp4') ? 'mp4' : 'webm';
+        const fname = `enregistrement.${ext}`;
         setEntAudioBlob(blob);
         setEntAudioUrl(url);
-        setEntAudioName(`enregistrement.${ext}`);
+        setEntAudioName(fname);
         setEntStep('have-audio');
         setEntRecording(false);
+        // auto-upload Supabase si connecté
+        uploadEntretienToSupabase(blob, fname, entRecMs);
       };
       entMRRef.current = mr;
       mr.start();
@@ -249,6 +328,8 @@ export default function App() {
     setEntTranscript('');
     setEntNote('');
     setEntStep('have-audio');
+    setEntRecordId(null);
+    uploadEntretienToSupabase(file, file.name, null);
   };
 
   const transcribeEntChunk = async (blob, filename) => {
@@ -276,30 +357,31 @@ export default function App() {
     setEntStep('transcribing');
     setEntTranscript('');
     try {
-      const LIMIT = 24 * 1024 * 1024; // 24 Mo par chunk (sécurité sous la limite Whisper)
+      const LIMIT = 24 * 1024 * 1024;
       const blob = entAudioBlob;
       const ext = (entAudioName.split('.').pop() || 'webm').toLowerCase();
       const baseType = blob.type || 'audio/webm';
+      let finalTxt = '';
       if (blob.size <= LIMIT) {
         setEntProgress({ current: 0, total: 1 });
-        const txt = await transcribeEntChunk(blob, `audio.${ext}`);
+        finalTxt = await transcribeEntChunk(blob, `audio.${ext}`);
         setEntProgress({ current: 1, total: 1 });
-        setEntTranscript(txt);
+        setEntTranscript(finalTxt);
       } else {
-        // Découpage byte-level (best-effort) — fonctionne moyennement avec webm.
-        // Pour les fichiers >25Mo, on conseille mp3/m4a en pratique.
         const total = Math.ceil(blob.size / LIMIT);
         setEntProgress({ current: 0, total });
-        let acc = '';
         for (let i = 0; i < total; i++) {
           const chunk = blob.slice(i * LIMIT, (i + 1) * LIMIT, baseType);
           const txt = await transcribeEntChunk(chunk, `audio_${i + 1}.${ext}`);
-          acc += (acc ? ' ' : '') + txt;
+          finalTxt += (finalTxt ? ' ' : '') + txt;
           setEntProgress({ current: i + 1, total });
-          setEntTranscript(acc);
+          setEntTranscript(finalTxt);
         }
       }
       setEntStep('transcribed');
+      if (entRecordId) {
+        try { await updateEntretien(entRecordId, { transcript: finalTxt }); } catch (e) { console.warn(e); }
+      }
     } catch (e) {
       setEntError(e.message);
       setEntStep('have-audio');
@@ -357,9 +439,13 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
         throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
       }
       const data = await resp.json();
-      const txt = data.choices?.[0]?.message?.content || '';
-      setEntNote(txt.trim());
+      const txt = (data.choices?.[0]?.message?.content || '').trim();
+      setEntNote(txt);
       setEntStep('done');
+      if (entRecordId) {
+        try { await updateEntretien(entRecordId, { note: txt, context: entContext || null }); } catch (e) { console.warn(e); }
+      }
+      try { setEntHistory(await listEntretiens()); } catch {}
     } catch (e) {
       setEntError(e.message);
       setEntStep('transcribed');
@@ -2510,6 +2596,16 @@ Contraintes :
             <p className="text-sm" style={{ color: '#5a5a5a' }}>
               Enregistre ou importe un entretien (jusqu'à 30 min). L'IA produit une observation médicale structurée.
             </p>
+            {supabaseEnabled && session && (
+              <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+                ☁ Audio + transcript + restitution stockés sur ton compte Supabase et auto-supprimés après 24h.
+              </p>
+            )}
+            {supabaseEnabled && !session && (
+              <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+                Connecte-toi pour conserver les entretiens 24h sur ton compte (sinon tout reste en local et disparaît au reload).
+              </p>
+            )}
           </div>
 
           {!apiKey && (
@@ -2563,6 +2659,8 @@ Contraintes :
                   <span className="text-xs mono" style={{ color: '#5a5a5a' }}>
                     {(entAudioBlob.size / (1024 * 1024)).toFixed(2)} Mo
                   </span>
+                  {entUploading && <span className="text-xs" style={{ color: '#8a8a8a' }}>↑ Upload Supabase…</span>}
+                  {!entUploading && entRecordId && <span className="text-xs" style={{ color: '#3a7a3a' }}>✓ Stocké (24h)</span>}
                 </div>
                 {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-3" />}
                 <div className="flex flex-wrap gap-3">
@@ -2659,6 +2757,54 @@ Contraintes :
                     </button>
                   </div>
                 </div>
+              )}
+            </section>
+          )}
+
+          {/* Historique 24h */}
+          {supabaseEnabled && session && (
+            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 4 }}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="display text-lg" style={{ fontWeight: 600 }}>Mes entretiens (24h)</h2>
+                <button onClick={refreshEntHistory} className="btn-secondary px-3 py-1.5 text-xs">↻ Actualiser</button>
+              </div>
+              {entHistoryLoading && <div className="text-xs" style={{ color: '#8a8a8a' }}>Chargement…</div>}
+              {!entHistoryLoading && entHistory.length === 0 && (
+                <div className="text-xs" style={{ color: '#8a8a8a' }}>Aucun entretien stocké pour l'instant.</div>
+              )}
+              {entHistory.length > 0 && (
+                <ul className="divide-y" style={{ borderColor: '#e6dfc8' }}>
+                  {entHistory.map(row => {
+                    const created = new Date(row.created_at);
+                    const expires = new Date(row.expires_at);
+                    const remainMs = expires - new Date();
+                    const remainH = Math.max(0, Math.floor(remainMs / 3600000));
+                    const remainM = Math.max(0, Math.floor((remainMs % 3600000) / 60000));
+                    const sizeMo = row.size_bytes ? (row.size_bytes / (1024 * 1024)).toFixed(1) : '?';
+                    const dur = row.duration_ms ? fmtMs(row.duration_ms) : null;
+                    return (
+                      <li key={row.id} className="py-3 flex items-center gap-3 flex-wrap">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm">
+                            {created.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+                            {dur && <span className="ml-2 mono text-xs" style={{ color: '#8a8a8a' }}>{dur}</span>}
+                            <span className="ml-2 text-xs" style={{ color: '#8a8a8a' }}>{sizeMo} Mo</span>
+                          </div>
+                          <div className="text-xs" style={{ color: '#8a8a8a' }}>
+                            {row.note ? '✓ Restitution' : (row.transcript ? '✓ Transcrit' : 'Audio brut')}
+                            <span className="ml-2">· expire dans {remainH}h{String(remainM).padStart(2, '0')}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => restoreEntretien(row)} className="btn-secondary px-3 py-1.5 text-xs">Ouvrir</button>
+                        <button
+                          onClick={() => { if (confirm('Supprimer cet entretien ?')) deleteEntretienRow(row); }}
+                          className="btn-secondary px-3 py-1.5 text-xs"
+                          style={{ color: '#b54125' }}
+                        >Supprimer</button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </section>
           )}
