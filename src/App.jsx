@@ -11,11 +11,11 @@ import { ECOS_CASES } from './ecosCases';
 import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
 
 // ============================================================
-//  EXTRACTEUR & QUIZ DE QCM/QROC â€” V2
-//  - Charge un PDF de cours corrigÃ©
-//  - DÃ©tecte automatiquement les bonnes rÃ©ponses (couleur verte)
+//  EXTRACTEUR & QUIZ DE QCM/QROC — V2
+//  - Charge un PDF de cours corrigé
+//  - Détecte automatiquement les bonnes réponses (couleur verte)
 //  - Mode quiz interactif avec correction
-//  - Ã‰valuation IA (OpenAI) pour les QROC
+//  - Évaluation IA (OpenAI) pour les QROC
 // ============================================================
 
 // ---------- SVG Icons (Lucide stripped) ----------
@@ -162,7 +162,7 @@ const classifyPixel = (r, g, b) => {
 
 const cleanMarkdownNoise = (s = '') => s
   .replace(/^#{1,6}\s*/gm, '')
-  .replace(/^\s*[-*]\s+/gm, 'â€¢ ')
+  .replace(/^\s*[-*]\s+/gm, '• ')
   .replace(/`{1,3}/g, '')
   .replace(/\*\*/g, '');
 
@@ -227,7 +227,7 @@ export default function App() {
   const [evaluating, setEvaluating] = useState(false);
   const [results, setResults] = useState([]);
 
-  // Settings â€” restaure depuis localStorage Ã  l'init (synchrone)
+  // Settings — restaure depuis localStorage à l'init (synchrone)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [useAI, setUseAI] = useState(() => {
@@ -254,7 +254,7 @@ export default function App() {
   const [savingDeck, setSavingDeck] = useState(false);
 
   // ---------- ECOS state ----------
-  const [ecosCase, setEcosCase] = useState(null); // cas sÃ©lectionnÃ©
+  const [ecosCase, setEcosCase] = useState(null); // cas sélectionné
   const [ecosMessages, setEcosMessages] = useState([]); // [{role, content}]
   const [ecosInput, setEcosInput] = useState('');
   const [ecosSending, setEcosSending] = useState(false);
@@ -274,7 +274,7 @@ export default function App() {
   const ecosTimerRef = useRef(null);
   const finishEcosRef = useRef(null);
 
-  // Cas custom (importÃ©s depuis PDF, ou convertis depuis les PDF intÃ©grÃ©s)
+  // Cas custom (importés depuis PDF, ou convertis depuis les PDF intégrés)
   const [customCases, setCustomCases] = useState(() => {
     try { return JSON.parse(localStorage.getItem('ecos_custom_cases') || '[]'); } catch { return []; }
   });
@@ -290,7 +290,7 @@ export default function App() {
   const [ecosCategory, setEcosCategory] = useState('all');
   const ecosImportInputRef = useRef(null);
 
-  // ---------- Entretien (Ã©coute + restitution IA) ----------
+  // ---------- Entretien (écoute + restitution IA) ----------
   const [entStep, setEntStep] = useState('idle'); // 'idle' | 'have-audio' | 'transcribing' | 'transcribed' | 'generating' | 'done'
   const [entRecording, setEntRecording] = useState(false);
   const [entRecMs, setEntRecMs] = useState(0);
@@ -300,7 +300,7 @@ export default function App() {
   const [entTranscript, setEntTranscript] = useState('');
   const [entNote, setEntNote] = useState('');
   const [entError, setEntError] = useState(null);
-  const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'Ã©tudiant
+  const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'étudiant
   const [entProgress, setEntProgress] = useState({ current: 0, total: 0 });
   const [entRecordId, setEntRecordId] = useState(null); // id de la ligne entretiens en cours
   const [entHistory, setEntHistory] = useState([]); // historique 24h
@@ -312,7 +312,7 @@ export default function App() {
   const entTimerRef = useRef(null);
   const entFileInputRef = useRef(null);
 
-  // Tick durÃ©e enregistrement
+  // Tick durée enregistrement
   useEffect(() => {
     if (!entRecording) return;
     const start = Date.now() - entRecMs;
@@ -320,7 +320,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [entRecording]);
 
-  // Auto-stop Ã  30 min
+  // Auto-stop à 30 min
   useEffect(() => {
     if (entRecording && entRecMs >= 30 * 60 * 1000) {
       stopEntRecording();
@@ -349,7 +349,7 @@ export default function App() {
     entChunksRef.current = [];
   };
 
-  // Upload Supabase d'un blob audio (auto si connectÃ©)
+  // Upload Supabase d'un blob audio (auto si connecté)
   const uploadEntretienToSupabase = async (blob, filename, durationMs) => {
     if (!supabaseEnabled || !session) return null;
     setEntUploading(true);
@@ -381,7 +381,7 @@ export default function App() {
     }
   };
 
-  // Charge l'historique quand on entre dans l'onglet Entretien (et qu'on est connectÃ©)
+  // Charge l'historique quand on entre dans l'onglet Entretien (et qu'on est connecté)
   useEffect(() => {
     if (mode === 'entretien' && supabaseEnabled && session) {
       refreshEntHistory();
@@ -450,14 +450,14 @@ export default function App() {
         setEntAudioName(fname);
         setEntStep('have-audio');
         setEntRecording(false);
-        // auto-upload Supabase si connectÃ©
+        // auto-upload Supabase si connecté
         uploadEntretienToSupabase(blob, fname, entRecMs);
       };
       entMRRef.current = mr;
       mr.start();
       setEntRecording(true);
     } catch (e) {
-      setEntError('AccÃ¨s micro refusÃ© : ' + e.message);
+      setEntError('Accès micro refusé : ' + e.message);
     }
   };
 
@@ -469,9 +469,9 @@ export default function App() {
   const onEntFilePicked = (file) => {
     if (!file) return;
     setEntError(null);
-    const MAX = 100 * 1024 * 1024; // 100 MB hard cap (sera chunkÃ© pour Whisper)
+    const MAX = 100 * 1024 * 1024; // 100 MB hard cap (sera chunké pour Whisper)
     if (file.size > MAX) {
-      setEntError('Fichier trop gros (>100 Mo). Compresse-le ou dÃ©coupe-le.');
+      setEntError('Fichier trop gros (>100 Mo). Compresse-le ou découpe-le.');
       return;
     }
     if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
@@ -505,7 +505,7 @@ export default function App() {
   };
 
   const transcribeEntretien = async () => {
-    if (!apiKey) { setEntError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
     if (!entAudioBlob) return;
     setEntError(null);
     setEntStep('transcribing');
@@ -532,16 +532,16 @@ export default function App() {
           setEntTranscript(finalTxt);
         }
       }
-      // Ã‰tape d'Ã©tiquetage MÃ©decin / Patient via GPT
+      // Étape d'étiquetage Médecin / Patient via GPT
       setEntProgress({ current: 0, total: 0 });
       setEntStep('labelling');
       try {
-        const labelSys = `Tu reÃ§ois la transcription brute (sans Ã©tiquettes) d'un entretien mÃ©dical entre un Ã©tudiant en mÃ©decine (Ã‰TUDIANT) et un patient (PATIENT). Ta tÃ¢che : restituer le dialogue ligne par ligne en attribuant chaque rÃ©plique au bon locuteur. RÃ¨gles :
-- Format strict, une rÃ©plique par ligne, prÃ©fixÃ©e par "MÃ©decin :" ou "Patient :".
-- L'Ã©tudiant pose les questions et oriente l'entretien (motif, ATCD, examen). Le patient dÃ©crit ses symptÃ´mes, son histoire, ses ressentis.
-- Ne reformule PAS le contenu : reprends les mots de la transcription, corrige uniquement les fautes de transcription Ã©videntes et la ponctuation.
-- N'invente AUCUNE rÃ©plique. Si un passage est ambigu, fais le choix le plus probable.
-- Pas de commentaire, pas d'introduction. Uniquement le dialogue annotÃ©.`;
+        const labelSys = `Tu reçois la transcription brute (sans étiquettes) d'un entretien médical entre un étudiant en médecine (ÉTUDIANT) et un patient (PATIENT). Ta tâche : restituer le dialogue ligne par ligne en attribuant chaque réplique au bon locuteur. Règles :
+- Format strict, une réplique par ligne, préfixée par "Médecin :" ou "Patient :".
+- L'étudiant pose les questions et oriente l'entretien (motif, ATCD, examen). Le patient décrit ses symptômes, son histoire, ses ressentis.
+- Ne reformule PAS le contenu : reprends les mots de la transcription, corrige uniquement les fautes de transcription évidentes et la ponctuation.
+- N'invente AUCUNE réplique. Si un passage est ambigu, fais le choix le plus probable.
+- Pas de commentaire, pas d'introduction. Uniquement le dialogue annoté.`;
         const resp = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -562,10 +562,10 @@ export default function App() {
             setEntTranscript(labelled);
           }
         } else {
-          console.warn('Ã‰tiquetage Ã©chouÃ©', await resp.text());
+          console.warn('Étiquetage échoué', await resp.text());
         }
       } catch (e) {
-        console.warn('Ã‰tiquetage Ã©chouÃ©', e);
+        console.warn('Étiquetage échoué', e);
       }
       setEntStep('transcribed');
       if (entRecordId) {
@@ -578,39 +578,39 @@ export default function App() {
   };
 
   const generateEntNote = async () => {
-    if (!apiKey) { setEntError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
-    if (!entTranscript.trim()) { setEntError('Aucune transcription Ã  exploiter.'); return; }
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!entTranscript.trim()) { setEntError('Aucune transcription à exploiter.'); return; }
     setEntError(null);
     setEntStep('generating');
     setEntNote('');
     try {
-      const sys = `Tu es un mÃ©decin senior qui rÃ©dige une observation clinique structurÃ©e Ã  partir de la transcription brute d'un entretien mÃ©dical Ã©tudiantâ€“patient. Ta restitution doit Ãªtre : claire, professionnelle, sans invention (n'ajoute rien qui ne soit pas dans le texte ; mentionne explicitement "non prÃ©cisÃ©" si une rubrique est absente), et structurÃ©e en Markdown avec EXACTEMENT ces sections (titres en ##) :
+      const sys = `Tu es un médecin senior qui rédige une observation clinique structurée à partir de la transcription brute d'un entretien médical étudiant–patient. Ta restitution doit être : claire, professionnelle, sans invention (n'ajoute rien qui ne soit pas dans le texte ; mentionne explicitement "non précisé" si une rubrique est absente), et structurée en Markdown avec EXACTEMENT ces sections (titres en ##) :
 
 ## Motif de consultation
 ## Histoire de la maladie actuelle
-## AntÃ©cÃ©dents
-- MÃ©dicaux
+## Antécédents
+- Médicaux
 - Chirurgicaux
 - Familiaux
-- GynÃ©co-obstÃ©tricaux (si pertinent)
+- Gynéco-obstétricaux (si pertinent)
 - Allergies
 ## Mode de vie
 (tabac, alcool, drogues, profession, contexte social)
 ## Traitements en cours
-## SymptÃ´mes associÃ©s / revue des systÃ¨mes
+## Symptômes associés / revue des systèmes
 ## Examen clinique
-(uniquement si Ã©voquÃ© dans l'entretien)
-## SynthÃ¨se
-(3-5 lignes : rÃ©sumÃ© du cas, hypothÃ¨ses diagnostiques Ã©voquÃ©es par l'Ã©tudiant ou plausibles, points Ã  creuser)
+(uniquement si évoqué dans l'entretien)
+## Synthèse
+(3-5 lignes : résumé du cas, hypothèses diagnostiques évoquées par l'étudiant ou plausibles, points à creuser)
 ## Points forts de l'entretien
-## Points Ã  amÃ©liorer
+## Points à améliorer
 
-Reste fidÃ¨le au contenu, reformule proprement (sans guillemets), corrige les fautes de transcription Ã©videntes. Ne diagnostique pas Ã  la place â€” propose seulement des hypothÃ¨ses si elles aident l'Ã©tudiant.`;
+Reste fidèle au contenu, reformule proprement (sans guillemets), corrige les fautes de transcription évidentes. Ne diagnostique pas à la place — propose seulement des hypothèses si elles aident l'étudiant.`;
       const userMsg = `Transcription brute de l'entretien :
 
 ${entTranscript}
 
-${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
+${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
       const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -671,13 +671,13 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
     });
     if (remote && session) {
       upsertEcosAttempt(withUpdatedAt)
-        .then(() => setEcosSaveState(withUpdatedAt.data.status === 'finished' ? 'Session enregistrÃ©e' : 'Brouillon enregistrÃ©'))
+        .then(() => setEcosSaveState(withUpdatedAt.data.status === 'finished' ? 'Session enregistrée' : 'Brouillon enregistré'))
         .catch(e => {
           console.warn('upsertEcosAttempt', e);
           setEcosSaveState('Sauvegarde locale seulement');
         });
     } else {
-      setEcosSaveState('Brouillon local enregistrÃ©');
+      setEcosSaveState('Brouillon local enregistré');
     }
   };
 
@@ -759,7 +759,7 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
   const sendEcosMessage = async (textOverride) => {
     const txt = (textOverride ?? ecosInput).trim();
     if (!txt || !ecosCase || ecosSending) return;
-    if (!apiKey) { setEcosError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
     setEcosError(null);
     const newMessages = [...ecosMessages, { role: 'user', content: txt }];
     setEcosMessages(newMessages);
@@ -769,7 +769,7 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
       const body = {
         model,
         messages: [
-          { role: 'system', content: `${ecosCase.briefPatient}\n\nRÃˆGLES IMPORTANTES:\n- RÃ©ponds uniquement Ã  la question posÃ©e par le candidat.\n- Sois prÃ©cise et non Ã©vasive sur les symptÃ´mes/antÃ©cÃ©dents quand on te les demande.\n- N'ajoute pas spontanÃ©ment des informations qui n'ont pas Ã©tÃ© demandÃ©es.` },
+          { role: 'system', content: `${ecosCase.briefPatient}\n\nRÈGLES IMPORTANTES:\n- Réponds uniquement à la question posée par le candidat.\n- Sois précise et non évasive sur les symptômes/antécédents quand on te les demande.\n- N'ajoute pas spontanément des informations qui n'ont pas été demandées.` },
           ...newMessages,
         ],
         temperature: 0.2,
@@ -813,7 +813,7 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
   };
 
   const startRecording = async () => {
-    if (!apiKey) { setEcosError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
     setEcosError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -859,7 +859,7 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
       mr.start();
       setEcosRecording(true);
     } catch (e) {
-      setEcosError('AccÃ¨s micro refusÃ© : ' + e.message);
+      setEcosError('Accès micro refusé : ' + e.message);
     }
   };
 
@@ -871,8 +871,8 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
 
   const finishEcos = async () => {
     if (!ecosCase || ecosEvaluating) return;
-    if (!apiKey) { setEcosError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
-    if (ecosMessages.length === 0) { setEcosError('Aucune interaction Ã  Ã©valuer.'); return; }
+    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (ecosMessages.length === 0) { setEcosError('Aucune interaction à évaluer.'); return; }
     setEcosTimerRunning(false);
     setEcosError(null);
     setEcosEvaluating(true);
@@ -885,22 +885,22 @@ ${entContext ? `Contexte fourni par l'Ã©tudiant : ${entContext}` : ''}`;
         messages: [
           {
             role: 'system',
-            content: `Tu es un examinateur ECOS strict, constant et dÃ©terministe. Tu dois noter UNIQUEMENT Ã  partir de la grille fournie et du transcript fourni.
-RÃ¨gles impÃ©ratives:
-1) Ã‰value TOUS les items de la grille, dans le mÃªme ordre.
-2) pointsObtenus est bornÃ© entre 0 et pointsMax.
-3) Si un critÃ¨re n'est pas explicitement explorÃ© par le candidat (question/verification active), mettre 0.
+            content: `Tu es un examinateur ECOS strict, constant et déterministe. Tu dois noter UNIQUEMENT à partir de la grille fournie et du transcript fourni.
+Règles impératives:
+1) Évalue TOUS les items de la grille, dans le même ordre.
+2) pointsObtenus est borné entre 0 et pointsMax.
+3) Si un critère n'est pas explicitement exploré par le candidat (question/verification active), mettre 0.
 4) Pas d'invention: aucune information absente du transcript.
-5) Commentaires courts, factuels, citant le comportement observÃ©.
-6) Sois sÃ©vÃ¨re: une mention vague sans prÃ©cision clinique = 0 ou score minimal.
-7) N'accorde aucun point sur une simple salutation, reformulation, ou hypothÃ¨se non argumentÃ©e.
-RÃ©ponds STRICTEMENT en JSON valide:
+5) Commentaires courts, factuels, citant le comportement observé.
+6) Sois sévère: une mention vague sans précision clinique = 0 ou score minimal.
+7) N'accorde aucun point sur une simple salutation, reformulation, ou hypothèse non argumentée.
+Réponds STRICTEMENT en JSON valide:
 {"items":[{"section":"...","critere":"...","pointsMax":n,"pointsObtenus":n,"commentaire":"..."}],"feedbackGlobal":"...","pointsForts":["..."],"axesAmelioration":["..."]}.
-Total /${totalPoints}, ensuite cohÃ©rent avec une note /20.`,
+Total /${totalPoints}, ensuite cohérent avec une note /20.`,
           },
           {
             role: 'user',
-            content: `CAS : ${ecosCase.titre} (${ecosCase.specialite})\n\nCONSIGNE CANDIDAT :\n${ecosCase.consigneCandidat}\n\nGRILLE DE CORRECTION (total ${totalPoints} points) :\n${grille}\n\nTRANSCRIPT DE LA CONSULTATION :\n${transcript}\n\nÃ‰value chaque item de la grille en justifiant briÃ¨vement, puis fournis un feedback global, points forts et axes d'amÃ©lioration.`,
+            content: `CAS : ${ecosCase.titre} (${ecosCase.specialite})\n\nCONSIGNE CANDIDAT :\n${ecosCase.consigneCandidat}\n\nGRILLE DE CORRECTION (total ${totalPoints} points) :\n${grille}\n\nTRANSCRIPT DE LA CONSULTATION :\n${transcript}\n\nÉvalue chaque item de la grille en justifiant brièvement, puis fournis un feedback global, points forts et axes d'amélioration.`,
           },
         ],
         response_format: { type: 'json_object' },
@@ -938,18 +938,18 @@ Total /${totalPoints}, ensuite cohÃ©rent avec une note /20.`,
       });
       setMode('ecos-results');
     } catch (e) {
-      setEcosError('Erreur Ã©valuation : ' + e.message);
+      setEcosError('Erreur évaluation : ' + e.message);
     } finally {
       setEcosEvaluating(false);
     }
   };
 
-  // Garder une rÃ©fÃ©rence stable vers finishEcos pour le timer
+  // Garder une référence stable vers finishEcos pour le timer
   useEffect(() => { finishEcosRef.current = finishEcos; });
 
   // ----- Importer un ECOS depuis un PDF -----
   const extractPdfTextFromFile = async (file) => {
-    if (!window.pdfjsLib) throw new Error('PDF.js non chargÃ©');
+    if (!window.pdfjsLib) throw new Error('PDF.js non chargé');
     const buf = await file.arrayBuffer();
     const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
     const out = [];
@@ -963,21 +963,21 @@ Total /${totalPoints}, ensuite cohÃ©rent avec une note /20.`,
   };
 
   const convertRawToCaseViaGPT = async (rawText, sourceLabel) => {
-    if (!apiKey) throw new Error('Configure ta clÃ© API OpenAI dans les RÃ©glages.');
-    const sys = `Tu transformes une grille ECOS extraite d'un PDF (texte brut, parfois bruitÃ©) en un objet JSON STRICT conforme au format suivant, utilisÃ© par une application de simulation mÃ©dicale :
+    if (!apiKey) throw new Error('Configure ta clé API OpenAI dans les Réglages.');
+    const sys = `Tu transformes une grille ECOS extraite d'un PDF (texte brut, parfois bruité) en un objet JSON STRICT conforme au format suivant, utilisé par une application de simulation médicale :
 {
   "id": "string-kebab-case-unique",
   "titre": "string court",
   "specialite": "string (ex: 'Cardiologie / Urgences')",
-  "duree": number (minutes, dÃ©faut 8),
-  "consigneCandidat": "string markdown : contexte, mission, durÃ©e â€” ce que voit l'Ã©tudiant",
-  "briefPatient": "string : prompt systÃ¨me complet pour faire incarner le patient simulÃ© Ã  un LLM (TUTOIE le LLM, donne-lui un dossier dÃ©taillÃ© Ã  rÃ©vÃ©ler progressivement, interdit de jouer l'examinateur ou de donner le diagnostic)",
+  "duree": number (minutes, défaut 8),
+  "consigneCandidat": "string markdown : contexte, mission, durée — ce que voit l'étudiant",
+  "briefPatient": "string : prompt système complet pour faire incarner le patient simulé à un LLM (TUTOIE le LLM, donne-lui un dossier détaillé à révéler progressivement, interdit de jouer l'examinateur ou de donner le diagnostic)",
   "grilleCorrection": [{"section":"string","critere":"string","points":number}, ...]
 }
 Contraintes :
 - Les points de grilleCorrection doivent totaliser EXACTEMENT 20.
 - Au moins 6 items dans grilleCorrection.
-- Si le PDF ne donne pas de "brief patient", invente-le de faÃ§on cohÃ©rente avec la grille.
+- Si le PDF ne donne pas de "brief patient", invente-le de façon cohérente avec la grille.
 - Renvoie UNIQUEMENT l'objet JSON, sans texte autour.`;
     const usr = `Source : ${sourceLabel}\n\nTEXTE BRUT EXTRAIT DU PDF :\n${rawText.slice(0, 18000)}`;
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1010,7 +1010,7 @@ Contraintes :
   const handleEcosImportFile = async (f) => {
     if (!f) return;
     if (!/\.pdf$/i.test(f.name)) { setEcosImportError('PDF requis.'); return; }
-    if (!apiKey) { setEcosImportError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
+    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
     setEcosImportError(null);
     setEcosImportPreview(null);
     setEcosImportFilename(f.name);
@@ -1045,7 +1045,7 @@ Contraintes :
   };
 
   const convertBuiltInEcos = async () => {
-    if (!apiKey) { setEcosImportError('Configure ta clÃ© API OpenAI dans les RÃ©glages.'); return; }
+    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
     if (ecosBuiltInConverting) return;
     setEcosImportError(null);
     setEcosBuiltInConverting(true);
@@ -1065,7 +1065,7 @@ Contraintes :
         persistCustomCases(acc);
         if (session) { try { await upsertEcosCases([obj]); } catch (e) { console.warn('upsertEcosCases', e); } }
       } catch (e) {
-        console.warn('Ã‰chec conversion', item.filename, e.message);
+        console.warn('Échec conversion', item.filename, e.message);
       }
     }
     setEcosBuiltInConverting(false);
@@ -1092,7 +1092,7 @@ Contraintes :
   useEffect(() => {
     const loadScript = (src) => new Promise((res, rej) => {
       const s = document.createElement('script');
-      s.src = src; s.onload = res; s.onerror = () => rej(new Error('Ã‰chec : ' + src));
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error('Échec : ' + src));
       document.head.appendChild(s);
     });
     (async () => {
@@ -1117,10 +1117,10 @@ Contraintes :
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // Ã€ la connexion: charge la clÃ© API depuis user metadata + la liste des decks
+  // À la connexion: charge la clé API depuis user metadata + la liste des decks
   useEffect(() => {
     if (!session) { setDecks([]); return; }
-    // Refresh user from server pour avoir la derniÃ¨re clÃ© API (sync multi-appareils)
+    // Refresh user from server pour avoir la dernière clé API (sync multi-appareils)
     supabase.auth.getUser().then(({ data }) => {
       const meta = data?.user?.user_metadata || session.user?.user_metadata || {};
       if (meta.openai_key && meta.openai_key !== apiKey) {
@@ -1216,14 +1216,14 @@ Contraintes :
     return { text, items, lines };
   };
 
-  // ---------- DÃ©tection permissive des marqueurs d'options ----------
-  // Trouve les positions des marqueurs A./B)/C-/D:/Eâ€¦ dans un texte.
-  // TolÃ¨re: minuscules, espaces avant, ponctuation variÃ©e (. ) - : /), options
-  // sur la mÃªme ligne ou sur des lignes diffÃ©rentes. Ne garde que les lettres
-  // qui se suivent dans l'ordre A â†’ B â†’ C â†’ D â†’ E (Ã©vite les faux positifs
-  // type Â« 3) Question A propos de â€¦ Â»).
+  // ---------- Détection permissive des marqueurs d'options ----------
+  // Trouve les positions des marqueurs A./B)/C-/D:/E… dans un texte.
+  // Tolère: minuscules, espaces avant, ponctuation variée (. ) - : /), options
+  // sur la même ligne ou sur des lignes différentes. Ne garde que les lettres
+  // qui se suivent dans l'ordre A → B → C → D → E (évite les faux positifs
+  // type « 3) Question A propos de … »).
   const findOptionMarkers = (text) => {
-    // Accepte: A. A) A- A: A/ A] mais aussi simple "A " en dÃ©but de ligne.
+    // Accepte: A. A) A- A: A/ A] mais aussi simple "A " en début de ligne.
     // Accepte ponctuation suivie d'un retour ligne (option qui commence sur la ligne suivante).
     const re = /(^|[\n\s\(\[])([A-Ea-e])\s*[\.\)\-:\/\]]\s*(?=\S|\n)/g;
     const all = [];
@@ -1254,7 +1254,7 @@ Contraintes :
     if (t.length < 15) return 'empty';
     const low = t.toLowerCase();
     if (low.length < 60 && (low.includes('chargement') || low.includes('loading'))) return 'loading';
-    const hasQLabel = /\b(question|qcm|qroc|cas\s*clinique)\s*[nÂ°]?\s*\d*/i.test(t);
+    const hasQLabel = /\b(question|qcm|qroc|cas\s*clinique)\s*[n°]?\s*\d*/i.test(t);
     const markers = findOptionMarkers(t);
     const hasQMark = /\?/.test(t);
     if (markers.length >= 2) return 'qcm';
@@ -1265,10 +1265,10 @@ Contraintes :
     return 'correction';
   };
 
-  // ---------- DÃ©tection des bonnes rÃ©ponses (couleur) ----------
-  // Pour chaque ligne d'option (commenÃ§ant par A/B/C/D/E), calcule la bbox de
-  // la ligne, Ã©chantillonne tous les pixels colorÃ©s, et marque l'option comme
-  // Â« correcte Â» si les pixels verts dominent (vs. noirs/gris du texte normal).
+  // ---------- Détection des bonnes réponses (couleur) ----------
+  // Pour chaque ligne d'option (commençant par A/B/C/D/E), calcule la bbox de
+  // la ligne, échantillonne tous les pixels colorés, et marque l'option comme
+  // « correcte » si les pixels verts dominent (vs. noirs/gris du texte normal).
   const detectGreenOptions = async (page, items, lines) => {
     const scale = 2.0;
     const viewport = page.getViewport({ scale });
@@ -1307,7 +1307,7 @@ Contraintes :
       const m = lineText.match(/^\s*([A-Ea-e])\s*[\.\)\-:\/]?\s+\S/);
       if (!m) continue;
 
-      // Bounding box de la ligne en coordonnÃ©es canvas
+      // Bounding box de la ligne en coordonnées canvas
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const it of sortedLine) {
         if (!it.str.trim()) continue;
@@ -1324,8 +1324,8 @@ Contraintes :
       const stats = analyzeBox(minX - 2, minY - 2, maxX + 2, maxY + 2);
       if (stats.textPx < 12) continue;
 
-      // Verte si: pixels verts en quantitÃ© absolue suffisante,
-      // ET (au moins 12% des pixels colorÃ©s OU verts > noirs/2)
+      // Verte si: pixels verts en quantité absolue suffisante,
+      // ET (au moins 12% des pixels colorés OU verts > noirs/2)
       const greenRatio = stats.greenPx / stats.textPx;
       const greenVsBlack = stats.blackPx === 0 ? Infinity : stats.greenPx / stats.blackPx;
       const isGreen = stats.greenPx >= 20 && (greenRatio >= 0.12 || greenVsBlack >= 0.5);
@@ -1336,7 +1336,7 @@ Contraintes :
     return correctLetters;
   };
 
-  // ---------- OCR (Tesseract.js) â€” worker partagÃ©, FR ----------
+  // ---------- OCR (Tesseract.js) — worker partagé, FR ----------
   const ocrWorkerRef = useRef(null);
   const getOcrWorker = async () => {
     if (ocrWorkerRef.current) return ocrWorkerRef.current;
@@ -1349,7 +1349,7 @@ Contraintes :
     const { data } = await worker.recognize(canvas);
     return (data?.text || '').trim();
   };
-  // Reconstruit pseudo-items/lines Ã  partir des mots OCR (bboxâ†’x,y,w,h)
+  // Reconstruit pseudo-items/lines à partir des mots OCR (bbox→x,y,w,h)
   const ocrToItems = (data, viewportH) => {
     const words = data?.words || [];
     const items = words.map(w => ({
@@ -1423,7 +1423,7 @@ Contraintes :
 
   // ---------- Extraction PPTX (PowerPoint) ----------
   // Pour chaque slide, retourne { pageNum, text, type, correctSet, ... }
-  // compatible avec le pipeline PDF en aval. DÃ©tection Â« vert Â» lue
+  // compatible avec le pipeline PDF en aval. Détection « vert » lue
   // directement depuis les couleurs XML (<a:srgbClr val="..."/>),
   // donc pas de rendu canvas.
   const extractPptxPages = async (f, onProgress) => {
@@ -1509,16 +1509,16 @@ Contraintes :
     if (!f) return;
     const isPdf = /\.pdf$/i.test(f.name);
     const isPptx = /\.pptx$/i.test(f.name);
-    if (!isPdf && !isPptx) { setError('Formats supportÃ©s : PDF ou PPTX (PowerPoint).'); return; }
-    if (isPdf && !libsReady) { setError('BibliothÃ¨ques en cours de chargement, rÃ©essaie.'); return; }
+    if (!isPdf && !isPptx) { setError('Formats supportés : PDF ou PPTX (PowerPoint).'); return; }
+    if (isPdf && !libsReady) { setError('Bibliothèques en cours de chargement, réessaie.'); return; }
     setError(null);
     setQuestions([]); setPages([]); setResults([]);
     setFilename(f.name.replace(/\.(pdf|pptx)$/i, ''));
     setProcessing(true);
-    setProgress({ current: 0, total: 0, label: isPptx ? 'Lecture du PPTXâ€¦' : 'Lecture du PDFâ€¦' });
+    setProgress({ current: 0, total: 0, label: isPptx ? 'Lecture du PPTX…' : 'Lecture du PDF…' });
 
     try {
-      // Branche PPTX : pipeline simplifiÃ© (pas de rendu canvas)
+      // Branche PPTX : pipeline simplifié (pas de rendu canvas)
       if (isPptx) {
         const rawPages = await extractPptxPages(f, p => setProgress(p));
         const bank = [];
@@ -1555,7 +1555,7 @@ Contraintes :
       const buf = await f.arrayBuffer();
       const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
       const total = pdf.numPages;
-      setProgress({ current: 0, total, label: 'Extraction du texteâ€¦' });
+      setProgress({ current: 0, total, label: 'Extraction du texte…' });
 
       const rawPages = [];
       for (let i = 1; i <= total; i++) {
@@ -1565,7 +1565,7 @@ Contraintes :
         let ocrUsed = false;
         const needsOcr = ocrMode === 'force' || (ocrMode === 'auto' && text.replace(/\s/g, '').length < 25);
         if (needsOcr && window.Tesseract) {
-          setProgress({ current: i, total, label: `OCR page ${i}/${total}â€¦` });
+          setProgress({ current: i, total, label: `OCR page ${i}/${total}…` });
           try {
             const scale = 2.0;
             const viewport = page.getViewport({ scale });
@@ -1606,7 +1606,7 @@ Contraintes :
       let qcmIdx = 0;
       for (const p of qcmPages) {
         qcmIdx++;
-        setProgress({ current: qcmIdx, total: qcmPages.length, label: `DÃ©tection des bonnes rÃ©ponses ${qcmIdx}/${qcmPages.length}` });
+        setProgress({ current: qcmIdx, total: qcmPages.length, label: `Détection des bonnes réponses ${qcmIdx}/${qcmPages.length}` });
         if (p.ocrUsed) { p.correctSet = new Set(); p.detectionError = true; continue; }
         try {
           p.correctSet = await detectGreenOptions(p._page, p._items, p._lines);
@@ -1616,7 +1616,7 @@ Contraintes :
         }
       }
 
-      // Rendu d'image pour les pages QCM/QROC (affichage et schÃ©mas/figures Ã©ventuels)
+      // Rendu d'image pour les pages QCM/QROC (affichage et schémas/figures éventuels)
       const imagedPages = rawPages.filter(p => p.type === 'qcm' || p.type === 'qroc');
       let imgIdx = 0;
       for (const p of imagedPages) {
@@ -1728,11 +1728,11 @@ Contraintes :
       messages: [
         {
           role: 'system',
-          content: 'Tu es un correcteur d\'examen mÃ©dical franÃ§ais rigoureux. Tu Ã©values les rÃ©ponses courtes (QROC) en comparant la rÃ©ponse de l\'Ã©tudiant Ã  la rÃ©ponse de rÃ©fÃ©rence. RÃ©ponds STRICTEMENT en JSON avec les clÃ©s "verdict" (correct|partiel|incorrect), "score" (0-100), "explanation" (1-2 phrases en franÃ§ais, sans prÃ©ambule).',
+          content: 'Tu es un correcteur d\'examen médical français rigoureux. Tu évalues les réponses courtes (QROC) en comparant la réponse de l\'étudiant à la réponse de référence. Réponds STRICTEMENT en JSON avec les clés "verdict" (correct|partiel|incorrect), "score" (0-100), "explanation" (1-2 phrases en français, sans préambule).',
         },
         {
           role: 'user',
-          content: `Question : ${q.enonce}\n\nRÃ©ponse de rÃ©fÃ©rence (et variantes acceptÃ©es) : ${expectedAll}\n\nRÃ©ponse de l'Ã©tudiant : ${userText}\n\nÃ‰value.`,
+          content: `Question : ${q.enonce}\n\nRéponse de référence (et variantes acceptées) : ${expectedAll}\n\nRéponse de l'étudiant : ${userText}\n\nÉvalue.`,
         },
       ],
       response_format: { type: 'json_object' },
@@ -1760,7 +1760,7 @@ Contraintes :
         explanation: parsed.explanation || '',
       };
     } catch {
-      return { verdict: 'incorrect', score: 0, explanation: 'RÃ©ponse IA non parsable.' };
+      return { verdict: 'incorrect', score: 0, explanation: 'Réponse IA non parsable.' };
     }
   };
 
@@ -1776,15 +1776,15 @@ Contraintes :
         verdict: isCorrect ? 'correct' : 'incorrect',
         score: isCorrect ? 100 : 0,
         explanation: isCorrect
-          ? 'Bonne rÃ©ponse.'
-          : `RÃ©ponse(s) attendue(s) : ${[...correctSet].sort().join(', ')}`,
+          ? 'Bonne réponse.'
+          : `Réponse(s) attendue(s) : ${[...correctSet].sort().join(', ')}`,
         expected: [...correctSet].sort().join(', '),
         userValue: [...userSet].sort().join(', ') || '(aucune)',
       };
     } else {
       const userText = (userAnswer.text || '').trim();
       if (!userText) {
-        fb = { verdict: 'incorrect', score: 0, explanation: 'Aucune rÃ©ponse fournie.', expected: q.expected, userValue: '(vide)' };
+        fb = { verdict: 'incorrect', score: 0, explanation: 'Aucune réponse fournie.', expected: q.expected, userValue: '(vide)' };
       } else {
         const userN = normalize(userText);
         const allRefs = [q.expected, ...q.variants].filter(Boolean).map(normalize);
@@ -1797,7 +1797,7 @@ Contraintes :
         if (matched) {
           fb = {
             verdict: 'correct', score: 100,
-            explanation: 'RÃ©ponse correcte (ou trÃ¨s proche).',
+            explanation: 'Réponse correcte (ou très proche).',
             expected: q.expected, userValue: userText,
           };
         } else if (useAI && apiKey) {
@@ -1808,14 +1808,14 @@ Contraintes :
           } catch (e) {
             fb = {
               verdict: 'incorrect', score: 0,
-              explanation: `Comparaison stricte : non. IA indisponible (${e.message}). RÃ©ponse attendue : ${q.expected}.`,
+              explanation: `Comparaison stricte : non. IA indisponible (${e.message}). Réponse attendue : ${q.expected}.`,
               expected: q.expected, userValue: userText,
             };
           } finally { setEvaluating(false); }
         } else {
           fb = {
             verdict: 'incorrect', score: 0,
-            explanation: `RÃ©ponse attendue : ${q.expected}${q.variants.length ? ` (variantes : ${q.variants.join(', ')})` : ''}`,
+            explanation: `Réponse attendue : ${q.expected}${q.variants.length ? ` (variantes : ${q.variants.join(', ')})` : ''}`,
             expected: q.expected, userValue: userText,
           };
         }
@@ -1837,7 +1837,7 @@ Contraintes :
 
   // ---------- Auth handlers ----------
   const submitAuth = async () => {
-    if (!supabaseEnabled) { setAuthError('Supabase non configurÃ© (VITE_SUPABASE_URL / _ANON_KEY).'); return; }
+    if (!supabaseEnabled) { setAuthError('Supabase non configuré (VITE_SUPABASE_URL / _ANON_KEY).'); return; }
     setAuthBusy(true); setAuthError(null);
     try {
       const fn = authIsSignup ? supabase.auth.signUp : supabase.auth.signInWithPassword;
@@ -1901,9 +1901,9 @@ Contraintes :
 
   const startFavoritesQuiz = () => {
     const allFav = decks.flatMap(d => (d.questions || []).filter(q => q.favorite).map(q => ({ ...q, _deck: d.name })));
-    if (!allFav.length) { alert('Aucun favori. Ã‰toile les questions Ã  revoir depuis un deck.'); return; }
+    if (!allFav.length) { alert('Aucun favori. Étoile les questions à revoir depuis un deck.'); return; }
     const playable = allFav.filter(q => q.type === 'qcm' ? !q.hasNoCorrect : !q.hasNoAnswer);
-    if (!playable.length) { alert('Aucun favori jouable (rÃ©ponses manquantes).'); return; }
+    if (!playable.length) { alert('Aucun favori jouable (réponses manquantes).'); return; }
     setQuizQuestions([...playable].sort(() => Math.random() - 0.5));
     setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
     setMode('quiz');
@@ -2294,17 +2294,17 @@ Contraintes :
               </button>
             )}
             {supabaseEnabled && (session
-              ? <button onClick={signOut} className="btn-secondary px-3 py-1.5 text-xs" title={session.user?.email}>DÃ©connexion</button>
+              ? <button onClick={signOut} className="btn-secondary px-3 py-1.5 text-xs" title={session.user?.email}>Déconnexion</button>
               : <button onClick={() => setShowAuth(true)} className="btn-secondary px-3 py-1.5 text-xs">Connexion</button>
             )}
             <button onClick={() => setShowSettings(true)} className="btn-secondary px-3 py-1.5 text-xs">
-              <IconCog size={13} /> RÃ©glages
+              <IconCog size={13} /> Réglages
             </button>
           </div>
         </div>
       </header>
 
-      {/* Barre de menu â€” bascule entre les outils */}
+      {/* Barre de menu — bascule entre les outils */}
       <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec' }}>
         <TabBar
           tabs={[
@@ -2338,27 +2338,27 @@ Contraintes :
              onClick={() => setShowAuth(false)}>
           <div className="bg-white p-8 max-w-md w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()}>
             <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>
-              {authIsSignup ? 'CrÃ©er un compte' : 'Connexion'}
+              {authIsSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
             {!supabaseEnabled && (
               <p className="text-xs mb-4" style={{ color: '#b54125' }}>
-                Supabase n'est pas configurÃ©. DÃ©finis VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY puis exÃ©cute supabase-schema.sql.
+                Supabase n'est pas configuré. Définis VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY puis exécute supabase-schema.sql.
               </p>
             )}
             <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
               placeholder="email@exemple.com" className="input-field w-full mb-3" autoFocus />
             <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && submitAuth()}
-              placeholder="Mot de passe (min. 6 caractÃ¨res)" className="input-field w-full mb-3" />
+              placeholder="Mot de passe (min. 6 caractères)" className="input-field w-full mb-3" />
             {authError && <p className="text-xs mb-3" style={{ color: '#b54125' }}>{authError}</p>}
             <div className="flex justify-between items-center">
               <button onClick={() => { setAuthIsSignup(!authIsSignup); setAuthError(null); }}
                 className="text-xs underline" style={{ color: '#5a5a5a' }}>
-                {authIsSignup ? 'â† DÃ©jÃ  un compte ? Connexion' : 'Pas de compte ? S\'inscrire â†’'}
+                {authIsSignup ? '← Déjà un compte ? Connexion' : 'Pas de compte ? S\'inscrire →'}
               </button>
               <button onClick={submitAuth} disabled={authBusy || !authEmail || !authPassword}
                 className="btn-primary px-5 py-2 text-sm">
-                {authBusy ? 'â€¦' : (authIsSignup ? 'CrÃ©er' : 'Se connecter')}
+                {authBusy ? '…' : (authIsSignup ? 'Créer' : 'Se connecter')}
               </button>
             </div>
           </div>
@@ -2369,39 +2369,39 @@ Contraintes :
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowSettings(false)}>
           <div className="bg-white p-8 max-w-lg w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()}>
-            <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>RÃ©glages</h2>
+            <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>Réglages</h2>
             <p className="text-sm mb-6" style={{ color: '#5a5a5a' }}>
-              La clÃ© reste stockÃ©e localement dans ton navigateur et n'est envoyÃ©e qu'Ã  OpenAI.
+              La clé reste stockée localement dans ton navigateur et n'est envoyée qu'à OpenAI.
             </p>
-            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>ClÃ© API OpenAI</label>
+            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Clé API OpenAI</label>
             <div className="flex gap-2 mb-5">
               <input type={showKey ? 'text' : 'password'} value={apiKey} onChange={e => persistKey(e.target.value)}
                 placeholder="sk-..." className="input-field flex-1" />
-              <button onClick={() => setShowKey(!showKey)} className="btn-secondary px-3 text-xs" aria-label={showKey ? 'Cacher la clÃ©' : 'Voir la clÃ©'}>
+              <button onClick={() => setShowKey(!showKey)} className="btn-secondary px-3 text-xs" aria-label={showKey ? 'Cacher la clé' : 'Voir la clé'}>
                 {showKey ? <IconEyeOff size={14} /> : <IconEye size={14} />}
               </button>
             </div>
-            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>ModÃ¨le</label>
+            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modèle</label>
             <input type="text" value={model} onChange={e => persistModel(e.target.value)} className="input-field w-full mb-2" />
             <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
-              Suggestions : <code className="mono">gpt-5.4-mini</code> (recommandÃ©, ~0,07 Â¢/QROC) Â· <code className="mono">gpt-5.4-nano</code> (5Ã— moins cher) Â· <code className="mono">gpt-5.5</code> (max qualitÃ©)
+              Suggestions : <code className="mono">gpt-5.4-mini</code> (recommandé, ~0,07 ¢/QROC) · <code className="mono">gpt-5.4-nano</code> (5× moins cher) · <code className="mono">gpt-5.5</code> (max qualité)
             </p>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <span className="switch">
                 <input type="checkbox" checked={useAI} onChange={e => persistUseAI(e.target.checked)} />
                 <span className="slider" />
               </span>
-              <span className="text-sm">Utiliser l'IA pour Ã©valuer les QROC quand la comparaison stricte Ã©choue</span>
+              <span className="text-sm">Utiliser l'IA pour évaluer les QROC quand la comparaison stricte échoue</span>
             </label>
 
             <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>OCR (Tesseract.js, FR)</label>
             <select value={ocrMode} onChange={e => persistOcrMode(e.target.value)} className="input-field w-full mb-2">
-              <option value="off">DÃ©sactivÃ©</option>
-              <option value="auto">Automatique (uniquement si page sans texte â€” recommandÃ©)</option>
+              <option value="off">Désactivé</option>
+              <option value="auto">Automatique (uniquement si page sans texte — recommandé)</option>
               <option value="force">Forcer OCR sur toutes les pages (lent)</option>
             </select>
             <p className="text-xs mb-6" style={{ color: '#8a8a8a' }}>
-              Utile pour les PDF scannÃ©s. La dÃ©tection de la couleur verte est dÃ©sactivÃ©e sur les pages OCR â€” il faudra cocher les bonnes rÃ©ponses Ã  la main.
+              Utile pour les PDF scannés. La détection de la couleur verte est désactivée sur les pages OCR — il faudra cocher les bonnes réponses à la main.
             </p>
             <div className="flex justify-end">
               <button onClick={() => setShowSettings(false)} className="btn-primary px-5 py-2 text-sm">Fermer</button>
@@ -2412,12 +2412,12 @@ Contraintes :
 
       {!libsReady && !libsError && (
         <div className="max-w-7xl mx-auto px-6 py-3 text-xs mono" style={{ color: '#8a8a8a' }}>
-          Chargement des bibliothÃ¨ques PDFâ€¦
+          Chargement des bibliothèques PDF…
         </div>
       )}
       {libsError && (
         <div className="max-w-7xl mx-auto px-6 py-3 text-xs mono" style={{ color: '#b54125' }}>
-          Erreur de chargement des bibliothÃ¨ques : {libsError}
+          Erreur de chargement des bibliothèques : {libsError}
         </div>
       )}
 
@@ -2442,12 +2442,12 @@ Contraintes :
                 className="hidden"
                 onChange={e => handleFile(e.target.files?.[0])} />
               <div className="display text-2xl md:text-3xl mb-2" style={{ fontWeight: 500 }}>
-                {processing ? 'Extraction en coursâ€¦' : 'DÃ©pose un PDF ou PPTX de cours corrigÃ©'}
+                {processing ? 'Extraction en cours…' : 'Dépose un PDF ou PPTX de cours corrigé'}
               </div>
               <div className="text-sm" style={{ color: '#5a5a5a' }}>
                 {processing
                   ? `${progress.label} (${progress.current}/${progress.total})`
-                  : 'DÃ©tection automatique des bonnes rÃ©ponses (texte vert) + mode quiz interactif'}
+                  : 'Détection automatique des bonnes réponses (texte vert) + mode quiz interactif'}
               </div>
               {processing && progress.total > 0 && (
                 <div className="w-full max-w-md mt-6 h-1" style={{ background: '#d6d0c1' }}>
@@ -2463,7 +2463,7 @@ Contraintes :
             {supabaseEnabled && session && decks.length > 0 && (
               <div className="mt-6 flex flex-wrap gap-3 items-center">
                 <button onClick={() => setMode('library')} className="btn-secondary px-4 py-2 text-sm">
-                  Ouvrir un deck sauvegardÃ© ({decks.length})
+                  Ouvrir un deck sauvegardé ({decks.length})
                 </button>
                 <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
                   <IconStar size={14} filled /> Quiz sur mes favoris ({decks.reduce((n, d) => n + (d.questions || []).filter(q => q.favorite).length, 0)})
@@ -2477,9 +2477,9 @@ Contraintes :
               style={{ borderColor: '#1a1a1a', background: '#fff', borderRadius: 'var(--r-md)' }}
             >
               <div>
-                <div className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS â€” EntraÃ®nement</div>
+                <div className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Entraînement</div>
                 <div className="text-sm" style={{ color: '#5a5a5a' }}>
-                  Examen Clinique Objectif StructurÃ© : patient simulÃ© par IA, dictÃ©e vocale, notation dÃ©taillÃ©e /20.
+                  Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation détaillée /20.
                 </div>
               </div>
               <div className="arrow-slide" style={{ color: '#b54125', display: 'inline-flex', alignItems: 'center' }}>
@@ -2489,9 +2489,9 @@ Contraintes :
 
             <div className="grid md:grid-cols-3 gap-6 mt-10">
               {[
-                { t: 'Auto-correction', d: 'DÃ©tection des bonnes rÃ©ponses par analyse de la couleur du texte (vert = correct).' },
-                { t: 'Quiz interactif', d: 'Tu rÃ©ponds, l\'app corrige immÃ©diatement. Score, erreurs, et possibilitÃ© de revoir.' },
-                { t: 'Ã‰valuation IA', d: 'Pour les QROC, OpenAI Ã©value ta rÃ©ponse mÃªme si elle ne matche pas exactement la rÃ©fÃ©rence.' },
+                { t: 'Auto-correction', d: 'Détection des bonnes réponses par analyse de la couleur du texte (vert = correct).' },
+                { t: 'Quiz interactif', d: 'Tu réponds, l\'app corrige immédiatement. Score, erreurs, et possibilité de revoir.' },
+                { t: 'Évaluation IA', d: 'Pour les QROC, OpenAI évalue ta réponse même si elle ne matche pas exactement la référence.' },
               ].map((c, i) => (
                 <div key={i} className={`card-hover anim-fade-up anim-stagger-${3 + i} p-5 border`} style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div className="display text-lg mb-1" style={{ fontWeight: 600 }}>{c.t}</div>
@@ -2506,9 +2506,9 @@ Contraintes :
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
               <div>
-                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS â€” Choix du cas</h2>
+                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Choix du cas</h2>
                 <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  SÃ©lectionne un cas clinique. Tu joues le mÃ©decin, l'IA joue le patient.
+                  Sélectionne un cas clinique. Tu joues le médecin, l'IA joue le patient.
                 </div>
               </div>
               <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs"><IconArrowLeft size={12} /> Retour</button>
@@ -2516,7 +2516,7 @@ Contraintes :
 
             {!apiKey && (
               <div className="p-4 mb-4 text-sm" style={{ background: '#fff8e0', borderLeft: '3px solid #c4a84d', color: '#5a4a10' }}>
-                Aucune clÃ© OpenAI configurÃ©e. Ouvre les <button onClick={() => setShowSettings(true)} className="underline">RÃ©glages</button> pour la renseigner avant de dÃ©marrer un ECOS.
+                Aucune clé OpenAI configurée. Ouvre les <button onClick={() => setShowSettings(true)} className="underline">Réglages</button> pour la renseigner avant de démarrer un ECOS.
               </div>
             )}
 
@@ -2527,7 +2527,7 @@ Contraintes :
               </button>
             </div>
             <div className="mb-4 flex items-center gap-2">
-              <label className="mono text-xs" style={{ color: '#5a5a5a' }}>CatÃ©gorie</label>
+              <label className="mono text-xs" style={{ color: '#5a5a5a' }}>Catégorie</label>
               <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1">
                 <option value="all">Toutes</option>
                 {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -2546,17 +2546,17 @@ Contraintes :
                   className="text-sm"
                 />
                 {ecosImportFilename && <div className="mono text-xs mt-2" style={{ color: '#5a5a5a' }}>Fichier : {ecosImportFilename}</div>}
-                {ecosImportProcessing && <div className="text-xs mt-2 mono" style={{ color: '#5a5a5a' }}>Extraction + gÃ©nÃ©ration via GPTâ€¦</div>}
+                {ecosImportProcessing && <div className="text-xs mt-2 mono" style={{ color: '#5a5a5a' }}>Extraction + génération via GPT…</div>}
                 {ecosImportError && <div className="text-xs mt-2" style={{ color: '#b54125' }}>{ecosImportError}</div>}
                 {ecosImportPreview && (
                   <div className="mt-3 p-3" style={{ background: '#f6f3ec' }}>
                     <div className="display text-base mb-1" style={{ fontWeight: 600 }}>{ecosImportPreview.titre}</div>
-                    <div className="mono text-xs mb-2" style={{ color: '#b54125' }}>{ecosImportPreview.specialite} Â· {ecosImportPreview.duree} min</div>
+                    <div className="mono text-xs mb-2" style={{ color: '#b54125' }}>{ecosImportPreview.specialite} · {ecosImportPreview.duree} min</div>
                     <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
-                      Grille : {ecosImportPreview.grilleCorrection.length} items Â· {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+                      Grille : {ecosImportPreview.grilleCorrection.length} items · {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
                     </div>
                     <details className="text-xs">
-                      <summary className="cursor-pointer">AperÃ§u consigne candidat</summary>
+                      <summary className="cursor-pointer">Aperçu consigne candidat</summary>
                       <div className="mt-2 whitespace-pre-wrap" style={{ color: '#3a3a3a' }}>{ecosImportPreview.consigneCandidat}</div>
                     </details>
                     <div className="mt-3 flex gap-2">
@@ -2581,7 +2581,7 @@ Contraintes :
                   </div>
                   <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
                   <div className="text-xs" style={{ color: '#5a5a5a' }}>
-                    Grille : {c.grilleCorrection.length} items Â· {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
+                    Grille : {c.grilleCorrection.length} items · {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
                   </div>
                   {lastAttempt?.data?.status === 'in_progress' && (
                     <div className="mt-2">
@@ -2593,7 +2593,7 @@ Contraintes :
                   )}
                   {lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt && (
                     <div className="mt-2">
-                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>âœ… ECOS dÃ©jÃ  fait</span>
+                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
                       <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
                         Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
                       </div>
@@ -2615,7 +2615,7 @@ Contraintes :
                     </div>
                     <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
                     <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
-                      Grille : {(c.grilleCorrection || []).length} items Â· {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+                      Grille : {(c.grilleCorrection || []).length} items · {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
                     </div>
                     {lastAttempt?.data?.status === 'in_progress' && (
                       <div className="mt-2">
@@ -2627,7 +2627,7 @@ Contraintes :
                     )}
                     {lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt && (
                       <div className="mt-2">
-                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>âœ… ECOS dÃ©jÃ  fait</span>
+                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
                         <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
                           Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
                         </div>
@@ -2657,7 +2657,7 @@ Contraintes :
               <div>
                 <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>{ecosCase.titre}</h2>
                 <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  {ecosCase.specialite} Â· {ecosCase.duree} min
+                  {ecosCase.specialite} · {ecosCase.duree} min
                 </div>
               </div>
               <div className="flex gap-2 items-center">
@@ -2683,7 +2683,7 @@ Contraintes :
                         className="btn-secondary px-3 py-1.5 text-xs">
                         {ecosTimerRunning
                           ? <><IconPause size={11} /> Pause</>
-                          : <><IconPlay size={11} /> {ecosTimeLeft === (ecosCase.duree || 10) * 60 ? 'DÃ©marrer' : 'Reprendre'}</>}
+                          : <><IconPlay size={11} /> {ecosTimeLeft === (ecosCase.duree || 10) * 60 ? 'Démarrer' : 'Reprendre'}</>}
                       </button>
                     </div>
                   );
@@ -2692,7 +2692,7 @@ Contraintes :
                   className="btn-secondary px-3 py-1.5 text-xs">Abandonner</button>
                 <button onClick={finishEcos} disabled={ecosEvaluating || ecosMessages.length === 0}
                   className="btn-primary px-4 py-1.5 text-xs">
-                  {ecosEvaluating ? 'Ã‰valuationâ€¦' : <>Terminer l'ECOS <IconArrowRight size={12} /></>}
+                  {ecosEvaluating ? 'Évaluation…' : <>Terminer l'ECOS <IconArrowRight size={12} /></>}
                 </button>
               </div>
             </div>
@@ -2712,7 +2712,7 @@ Contraintes :
                 <div ref={ecosScrollRef} className="flex-1 overflow-y-auto scrollbar p-4 space-y-3" style={{ maxHeight: '60vh' }}>
                   {ecosMessages.length === 0 && (
                     <div className="text-sm italic" style={{ color: '#8a8a8a' }}>
-                      Le patient attend. Commence ton interrogatoire (prÃ©sentation, motif, anamnÃ¨seâ€¦).
+                      Le patient attend. Commence ton interrogatoire (présentation, motif, anamnèse…).
                     </div>
                   )}
                   {ecosMessages.map((m, i) => (
@@ -2723,7 +2723,7 @@ Contraintes :
                         borderRadius: 'var(--r-sm)', whiteSpace: 'pre-wrap',
                       }}>
                         <div className="mono text-xs mb-1" style={{ opacity: 0.6 }}>
-                          {m.role === 'user' ? 'Vous (mÃ©decin)' : 'Patient'}
+                          {m.role === 'user' ? 'Vous (médecin)' : 'Patient'}
                         </div>
                         {m.content}
                       </div>
@@ -2732,10 +2732,10 @@ Contraintes :
                   {ecosSending && (
                     <div className="flex justify-start chat-bubble">
                       <div className="p-3 text-sm italic flex items-center gap-2" style={{ background: '#f6f3ec', color: '#8a8a8a', borderRadius: 'var(--r-sm)' }}>
-                        <span>Le patient rÃ©flÃ©chit</span>
-                        <span className="think-dot">Â·</span>
-                        <span className="think-dot">Â·</span>
-                        <span className="think-dot">Â·</span>
+                        <span>Le patient réfléchit</span>
+                        <span className="think-dot">·</span>
+                        <span className="think-dot">·</span>
+                        <span className="think-dot">·</span>
                       </div>
                     </div>
                   )}
@@ -2746,7 +2746,7 @@ Contraintes :
                     <div className="text-xs mb-2" style={{ color: '#b54125' }}>{ecosError}</div>
                   )}
                   {ecosTranscribing && (
-                    <div className="text-xs mb-2 mono" style={{ color: '#5a5a5a' }}>Transcription en coursâ€¦</div>
+                    <div className="text-xs mb-2 mono" style={{ color: '#5a5a5a' }}>Transcription en cours…</div>
                   )}
                   <div className="flex gap-2 items-end">
                     <textarea
@@ -2758,7 +2758,7 @@ Contraintes :
                           sendEcosMessage();
                         }
                       }}
-                      placeholder={ecosRecording ? 'Enregistrementâ€¦' : 'Pose ta question au patient (EntrÃ©e pour envoyer, Maj+EntrÃ©e = retour Ã  la ligne)'}
+                      placeholder={ecosRecording ? 'Enregistrement…' : 'Pose ta question au patient (Entrée pour envoyer, Maj+Entrée = retour à la ligne)'}
                       rows={2}
                       className="input-field flex-1"
                       disabled={ecosSending || ecosRecording}
@@ -2771,7 +2771,7 @@ Contraintes :
                         else startRecording();
                       }}
                       disabled={ecosSending || ecosTranscribing}
-                      title={ecosRecording ? 'ArrÃªter la dictÃ©e' : (ecosInput.trim() ? 'Envoyer' : 'Dicter (Whisper)')}
+                      title={ecosRecording ? 'Arrêter la dictée' : (ecosInput.trim() ? 'Envoyer' : 'Dicter (Whisper)')}
                       className={ecosRecording ? 'px-3 py-2 text-sm' : (ecosInput.trim() ? 'btn-primary px-3 py-2 text-sm' : 'btn-secondary px-3 py-2 text-sm')}
                       style={ecosRecording ? {
                         background: '#b54125', color: '#fff', border: '1px solid #b54125',
@@ -2788,7 +2788,7 @@ Contraintes :
                   {ecosRecording && (
                     <div className="text-xs mt-2 mono flex items-center gap-2" style={{ color: '#b54125' }}>
                       <span className="rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#b54125' }} />
-                      Enregistrement en coursâ€¦
+                      Enregistrement en cours…
                     </div>
                   )}
                 </div>
@@ -2802,13 +2802,13 @@ Contraintes :
             {ecosScore.sur20 >= 18 && <Confetti />}
             <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
               <div className="mono text-xs mb-2 anim-fade-up" style={{ color: '#8a8a8a' }}>
-                {ecosCase.titre} Â· {ecosCase.specialite}
+                {ecosCase.titre} · {ecosCase.specialite}
               </div>
               <div className="display text-5xl mb-2 score-reveal" style={{ fontWeight: 600 }}>
                 {ecosScore.sur20} / 20
               </div>
               <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
-                {ecosScore.obtenu} / {ecosScore.total} points Â· {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} %
+                {ecosScore.obtenu} / {ecosScore.total} points · {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} %
               </div>
               <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-3">
                 <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
@@ -2850,21 +2850,21 @@ Contraintes :
                 <div className="p-4" style={{ background: '#e6f3e0', borderLeft: '3px solid #6b9d4d' }}>
                   <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#2d5a1a' }}>Points forts</div>
                   <ul className="text-sm space-y-1" style={{ color: '#2d5a1a' }}>
-                    {ecosEvaluation.pointsForts.map((p, i) => <li key={i}>â€¢ {p}</li>)}
+                    {ecosEvaluation.pointsForts.map((p, i) => <li key={i}>• {p}</li>)}
                   </ul>
                 </div>
               )}
               {Array.isArray(ecosEvaluation.axesAmelioration) && ecosEvaluation.axesAmelioration.length > 0 && (
                 <div className="p-4" style={{ background: '#f8e0d6', borderLeft: '3px solid #b54125' }}>
-                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#6b1f0a' }}>Axes d'amÃ©lioration</div>
+                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#6b1f0a' }}>Axes d'amélioration</div>
                   <ul className="text-sm space-y-1" style={{ color: '#6b1f0a' }}>
-                    {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>â€¢ {p}</li>)}
+                    {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>• {p}</li>)}
                   </ul>
                 </div>
               )}
             </div>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>DÃ©tail item par item</h3>
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Détail item par item</h3>
             <div className="space-y-2 mb-8">
               {(ecosEvaluation.items || []).map((it, i) => {
                 const max = Number(it.pointsMax) || 0;
@@ -2874,7 +2874,7 @@ Contraintes :
                 return (
                   <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff', borderLeftWidth: 3, borderLeftColor: color }}>
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-sm"><strong>{it.section}</strong> â€” {it.critere}</span>
+                      <span className="text-sm"><strong>{it.section}</strong> — {it.critere}</span>
                       <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{obt} / {max}</span>
                     </div>
                     {it.commentaire && <div className="text-xs italic" style={{ color: '#5a5a5a' }}>{it.commentaire}</div>}
@@ -2890,7 +2890,7 @@ Contraintes :
                 return (
                   <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                     <div className="flex items-baseline justify-between gap-2">
-                      <div className="text-sm"><strong>{g.section}</strong> â€” {g.critere}</div>
+                      <div className="text-sm"><strong>{g.section}</strong> — {g.critere}</div>
                       <div className="mono text-xs" style={{ color: '#5a5a5a' }}>{Number(got?.pointsObtenus || 0)} / {Number(g.points || 0)}</div>
                     </div>
                   </div>
@@ -2925,7 +2925,7 @@ Contraintes :
               </button>
             </div>
             {decks.length === 0 && (
-              <p className="text-sm" style={{ color: '#5a5a5a' }}>Aucun deck. Importe un PDF puis clique Â« Sauvegarder ce deck Â».</p>
+              <p className="text-sm" style={{ color: '#5a5a5a' }}>Aucun deck. Importe un PDF puis clique « Sauvegarder ce deck ».</p>
             )}
             <div className="grid md:grid-cols-2 gap-4">
               {decks.map(d => {
@@ -2940,8 +2940,8 @@ Contraintes :
                       </span>
                     </div>
                     <div className="text-xs mb-3" style={{ color: '#5a5a5a' }}>
-                      {qs.length} questions Â· {qs.filter(q => q.type === 'qcm').length} QCM Â· {qs.filter(q => q.type === 'qroc').length} QROC
-                      {favCount > 0 && <span style={{ color: '#c4a84d', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6 }}> Â· <IconStar size={11} filled /> {favCount}</span>}
+                      {qs.length} questions · {qs.filter(q => q.type === 'qcm').length} QCM · {qs.filter(q => q.type === 'qroc').length} QROC
+                      {favCount > 0 && <span style={{ color: '#c4a84d', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6 }}> · <IconStar size={11} filled /> {favCount}</span>}
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => loadDeck(d)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
@@ -2958,11 +2958,11 @@ Contraintes :
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
               <div>
-                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>VÃ©rification</h2>
+                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>Vérification</h2>
                 <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  {stats.total} questions extraites Â· {stats.qcm} QCM Â· {stats.qroc} QROC
+                  {stats.total} questions extraites · {stats.qcm} QCM · {stats.qroc} QROC
                   {(stats.badQcm + stats.badQroc) > 0 && (
-                    <span style={{ color: '#b54125' }}> Â· {stats.badQcm + stats.badQroc} sans rÃ©ponse dÃ©tectÃ©e</span>
+                    <span style={{ color: '#b54125' }}> · {stats.badQcm + stats.badQroc} sans réponse détectée</span>
                   )}
                 </div>
               </div>
@@ -2971,25 +2971,25 @@ Contraintes :
                   <button onClick={saveCurrentDeck} disabled={savingDeck || !questions.length}
                     className="btn-secondary px-4 py-2 text-sm">
                     {savingDeck
-                      ? 'Sauvegardeâ€¦'
+                      ? 'Sauvegarde…'
                       : <><IconSave size={14} /> {session ? 'Sauvegarder ce deck' : 'Sauvegarder (connexion)'}</>}
                   </button>
                 )}
                 {currentDeckId && (
-                  <span className="mono text-xs self-center" style={{ color: '#6b9d4d' }}>â— Deck synchronisÃ©</span>
+                  <span className="mono text-xs self-center" style={{ color: '#6b9d4d' }}>● Deck synchronisé</span>
                 )}
                 <button onClick={() => startQuiz(false)}
                   disabled={stats.total - stats.badQcm - stats.badQroc === 0}
                   className="btn-secondary px-4 py-2 text-sm">Quiz dans l'ordre</button>
                 <button onClick={() => startQuiz(true)}
                   disabled={stats.total - stats.badQcm - stats.badQroc === 0}
-                  className="btn-primary px-4 py-2 text-sm">Quiz en alÃ©atoire <IconArrowRight size={13} /></button>
+                  className="btn-primary px-4 py-2 text-sm">Quiz en aléatoire <IconArrowRight size={13} /></button>
               </div>
             </div>
 
             <p className="text-sm mb-4" style={{ color: '#5a5a5a' }}>
-              VÃ©rifie rapidement les bonnes rÃ©ponses dÃ©tectÃ©es. Tu peux corriger directement en cliquant.
-              Les questions <span style={{ color: '#b54125' }}>sans rÃ©ponse dÃ©tectÃ©e</span> sont exclues du quiz tant que tu ne les complÃ¨tes pas.
+              Vérifie rapidement les bonnes réponses détectées. Tu peux corriger directement en cliquant.
+              Les questions <span style={{ color: '#b54125' }}>sans réponse détectée</span> sont exclues du quiz tant que tu ne les complètes pas.
             </p>
 
             <div className="space-y-6">
@@ -3002,11 +3002,11 @@ Contraintes :
                     <div className="flex items-center gap-2">
                       <span className={`pill ${q.type === 'qcm' ? 'pill-qcm' : 'pill-qroc'}`}>{q.type.toUpperCase()}</span>
                       <span className="mono text-xs" style={{ color: '#8a8a8a' }}>p.{q.pageNum}</span>
-                      {q.detectionError && <span className="text-xs flex items-center gap-1" style={{ color: '#b54125' }}><IconWarning size={11} /> dÃ©tection couleur Ã©chouÃ©e</span>}
+                      {q.detectionError && <span className="text-xs flex items-center gap-1" style={{ color: '#b54125' }}><IconWarning size={11} /> détection couleur échouée</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       {(q.hasNoCorrect || q.hasNoAnswer) && (
-                        <span className="text-xs" style={{ color: '#b54125' }}>âš  aucune rÃ©ponse</span>
+                        <span className="text-xs" style={{ color: '#b54125' }}>⚠ aucune réponse</span>
                       )}
                       <button onClick={() => toggleFavorite(q.id)} className="star-btn p-1 -m-1" title="Marquer comme favori" aria-label="Favori">
                         <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>
@@ -3027,7 +3027,7 @@ Contraintes :
                   {q.imageDataUrl && (
                     <details className="mb-3">
                       <summary className="text-xs cursor-pointer mono" style={{ color: '#8a8a8a' }}>
-                        Voir la page d'origine (figures, schÃ©mas)
+                        Voir la page d'origine (figures, schémas)
                       </summary>
                       <img src={q.imageDataUrl} alt={`Page ${q.pageNum}`}
                         className="mt-2 max-w-full border" style={{ borderColor: '#d6d0c1' }} />
@@ -3041,24 +3041,24 @@ Contraintes :
                           className={`qcm-option ${o.correct ? 'correct' : ''}`}>
                           <span className="mono font-bold">{o.letter}.</span>
                           <span className="flex-1">{o.text}</span>
-                          {o.correct && <span className="text-xs">âœ“ correcte</span>}
+                          {o.correct && <span className="text-xs">✓ correcte</span>}
                         </div>
                       ))}
                       <div className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                        Clic sur une option pour corriger sa marque Â« bonne rÃ©ponse Â».
+                        Clic sur une option pour corriger sa marque « bonne réponse ».
                       </div>
                     </div>
                   )}
 
                   {q.type === 'qroc' && (
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>RÃ©ponse attendue</label>
+                      <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Réponse attendue</label>
                       <input type="text" value={q.expected}
                         onChange={e => setQROCAnswer(q.id, e.target.value)}
-                        className="input-field w-full" placeholder="(Ã  complÃ©ter)" />
+                        className="input-field w-full" placeholder="(à compléter)" />
                       {q.variants.length > 0 && (
                         <div className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                          Variantes acceptÃ©es : {q.variants.join(' Â· ')}
+                          Variantes acceptées : {q.variants.join(' · ')}
                         </div>
                       )}
                     </div>
@@ -3081,8 +3081,8 @@ Contraintes :
                     Question {quizIdx + 1} / {totalQuiz}
                   </div>
                   <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                    <span style={{ color: '#6b9d4d' }}>âœ“ {quizStats.correct}</span>
-                    <span className="mx-2" style={{ color: '#b54125' }}>âœ— {quizStats.incorrect}</span>
+                    <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct}</span>
+                    <span className="mx-2" style={{ color: '#b54125' }}>✗ {quizStats.incorrect}</span>
                     <button onClick={() => { if (confirm('Quitter le quiz ?')) setMode('extract'); }}
                       className="ml-3 underline">Quitter</button>
                   </div>
@@ -3118,7 +3118,7 @@ Contraintes :
                 {q.imageDataUrl && (
                   <details className="mb-5">
                     <summary className="text-xs cursor-pointer mono" style={{ color: '#8a8a8a' }}>
-                      Voir la page d'origine (figures, schÃ©mas)
+                      Voir la page d'origine (figures, schémas)
                     </summary>
                     <img src={q.imageDataUrl} alt={`Page ${q.pageNum}`}
                       className="mt-2 max-w-full border" style={{ borderColor: '#d6d0c1' }} />
@@ -3148,8 +3148,8 @@ Contraintes :
                           }}>
                           <span className="mono font-bold">{o.letter}.</span>
                           <span className="flex-1">{o.text}</span>
-                          {feedback && o.correct && <span className="text-xs">âœ“</span>}
-                          {feedback && !o.correct && sel && <span className="text-xs">âœ—</span>}
+                          {feedback && o.correct && <span className="text-xs">✓</span>}
+                          {feedback && !o.correct && sel && <span className="text-xs">✗</span>}
                         </div>
                       );
                     })}
@@ -3165,7 +3165,7 @@ Contraintes :
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !feedback) submitAnswer();
                       }}
                       disabled={!!feedback}
-                      placeholder="Ta rÃ©ponseâ€¦ (Ctrl/Cmd + EntrÃ©e pour valider)"
+                      placeholder="Ta réponse… (Ctrl/Cmd + Entrée pour valider)"
                       className="input-field w-full"
                       rows={3}
                       style={{ resize: 'vertical' }}
@@ -3185,7 +3185,7 @@ Contraintes :
                   }}>
                     <div className="flex items-baseline justify-between mb-1">
                       <strong style={{ fontSize: 14 }}>
-                        {feedback.verdict === 'correct' ? 'âœ“ Correct' : feedback.verdict === 'partiel' ? '~ Partiel' : 'âœ— Incorrect'}
+                        {feedback.verdict === 'correct' ? '✓ Correct' : feedback.verdict === 'partiel' ? '~ Partiel' : '✗ Incorrect'}
                       </strong>
                       {typeof feedback.score === 'number' && (
                         <span className="mono text-xs">{feedback.score}/100</span>
@@ -3200,12 +3200,12 @@ Contraintes :
                     <button onClick={submitAnswer}
                       disabled={evaluating || (q.type === 'qcm' ? !(userAnswer.set?.size) : !(userAnswer.text || '').trim())}
                       className="btn-primary px-6 py-2.5 text-sm">
-                      {evaluating ? 'Ã‰valuation IAâ€¦' : 'Valider'}
+                      {evaluating ? 'Évaluation IA…' : 'Valider'}
                     </button>
                   )}
                   {feedback && (
                     <button onClick={nextQuestion} className="btn-primary px-6 py-2.5 text-sm">
-                      {quizIdx + 1 >= totalQuiz ? 'Voir les rÃ©sultats' : 'Suivante'} <IconArrowRight size={14} />
+                      {quizIdx + 1 >= totalQuiz ? 'Voir les résultats' : 'Suivante'} <IconArrowRight size={14} />
                     </button>
                   )}
                 </div>
@@ -3224,15 +3224,15 @@ Contraintes :
                 {quizStats.correct} / {quizStats.total}
               </div>
               <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
-                {Math.round((quizStats.correct / quizStats.total) * 100)} % de bonnes rÃ©ponses
+                {Math.round((quizStats.correct / quizStats.total) * 100)} % de bonnes réponses
               </div>
               <div className="flex justify-center gap-4 mt-4 mono text-sm anim-fade-up anim-stagger-3">
-                <span style={{ color: '#6b9d4d' }}>âœ“ {quizStats.correct} correctes</span>
+                <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct} correctes</span>
                 {quizStats.partial > 0 && <span style={{ color: '#c4a84d' }}>~ {quizStats.partial} partielles</span>}
-                <span style={{ color: '#b54125' }}>âœ— {quizStats.incorrect} incorrectes</span>
+                <span style={{ color: '#b54125' }}>✗ {quizStats.incorrect} incorrectes</span>
               </div>
               <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-4">
-                <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Refaire (alÃ©atoire)</button>
+                <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Refaire (aléatoire)</button>
                 <button onClick={() => {
                   const errs = results.filter(r => r.feedback?.verdict !== 'correct').map(r => r.question);
                   if (errs.length === 0) return;
@@ -3244,7 +3244,7 @@ Contraintes :
               </div>
             </div>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>DÃ©tail</h3>
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Détail</h3>
             <div className="space-y-3">
               {results.map((r, i) => (
                 <div key={i} className="p-4 border" style={{
@@ -3255,15 +3255,15 @@ Contraintes :
                 }}>
                   <div className="flex items-baseline justify-between mb-2">
                     <span className="mono text-xs" style={{ color: '#8a8a8a' }}>
-                      {i + 1}. {r.question.type.toUpperCase()} Â· p.{r.question.pageNum}
+                      {i + 1}. {r.question.type.toUpperCase()} · p.{r.question.pageNum}
                     </span>
                     <span className="text-xs">
-                      {r.feedback?.verdict === 'correct' ? 'âœ“' : r.feedback?.verdict === 'partiel' ? '~' : 'âœ—'}
+                      {r.feedback?.verdict === 'correct' ? '✓' : r.feedback?.verdict === 'partiel' ? '~' : '✗'}
                     </span>
                   </div>
                   <div className="text-sm mb-2" style={{ whiteSpace: 'pre-wrap' }}>{r.question.enonce}</div>
                   <div className="text-xs grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div><strong>Ta rÃ©ponse :</strong> {r.feedback?.userValue}</div>
+                    <div><strong>Ta réponse :</strong> {r.feedback?.userValue}</div>
                     <div><strong>Attendue :</strong> {r.feedback?.expected}</div>
                   </div>
                   {r.feedback?.explanation && r.feedback.verdict !== 'correct' && (
@@ -3281,23 +3281,23 @@ Contraintes :
           <div className="mb-6">
             <h1 className="display text-3xl mb-2" style={{ fontWeight: 600 }}>Entretien patient</h1>
             <p className="text-sm" style={{ color: '#5a5a5a' }}>
-              Enregistre ou importe un entretien (jusqu'Ã  30 min). L'IA produit une observation mÃ©dicale structurÃ©e.
+              Enregistre ou importe un entretien (jusqu'à 30 min). L'IA produit une observation médicale structurée.
             </p>
             {supabaseEnabled && session && (
               <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                â˜ Audio + transcript + restitution stockÃ©s sur ton compte Supabase et auto-supprimÃ©s aprÃ¨s 24h.
+                ☁ Audio + transcript + restitution stockés sur ton compte Supabase et auto-supprimés après 24h.
               </p>
             )}
             {supabaseEnabled && !session && (
               <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                Connecte-toi pour conserver les entretiens 24h sur ton compte (sinon tout reste en local et disparaÃ®t au reload).
+                Connecte-toi pour conserver les entretiens 24h sur ton compte (sinon tout reste en local et disparaît au reload).
               </p>
             )}
           </div>
 
           {!apiKey && (
             <div className="mb-4 p-3 text-sm" style={{ background: '#fdf3ee', border: '1px solid #b54125', color: '#b54125' }}>
-              Configure ta clÃ© API OpenAI dans les RÃ©glages pour utiliser cet outil.
+              Configure ta clé API OpenAI dans les Réglages pour utiliser cet outil.
             </div>
           )}
           {entError && (
@@ -3306,14 +3306,14 @@ Contraintes :
             </div>
           )}
 
-          {/* Ã‰tape 1 : capture audio */}
+          {/* Étape 1 : capture audio */}
           <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
             <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>1. Audio</h2>
 
             {!entAudioBlob && !entRecording && (
               <div className="flex flex-wrap gap-3">
                 <button onClick={startEntRecording} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
-                  â— DÃ©marrer l'enregistrement
+                  ● Démarrer l'enregistrement
                 </button>
                 <button onClick={() => entFileInputRef.current?.click()} className="btn-secondary px-4 py-2 text-sm">
                   Importer un fichier audio
@@ -3332,9 +3332,9 @@ Contraintes :
               <div className="flex items-center gap-4">
                 <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#b54125', animation: 'pulse 1.2s infinite' }} />
                 <span className="mono text-lg">{fmtMs(entRecMs)}</span>
-                <span className="text-xs" style={{ color: '#5a5a5a' }}>(stop auto Ã  30:00)</span>
+                <span className="text-xs" style={{ color: '#5a5a5a' }}>(stop auto à 30:00)</span>
                 <button onClick={stopEntRecording} className="btn-primary px-4 py-2 text-sm" style={{ background: '#b54125' }}>
-                  â–  ArrÃªter
+                  ■ Arrêter
                 </button>
               </div>
             )}
@@ -3346,20 +3346,20 @@ Contraintes :
                   <span className="text-xs mono" style={{ color: '#5a5a5a' }}>
                     {(entAudioBlob.size / (1024 * 1024)).toFixed(2)} Mo
                   </span>
-                  {entUploading && <span className="text-xs" style={{ color: '#8a8a8a' }}>â†‘ Upload Supabaseâ€¦</span>}
-                  {!entUploading && entRecordId && <span className="text-xs" style={{ color: '#3a7a3a' }}>âœ“ StockÃ© (24h)</span>}
+                  {entUploading && <span className="text-xs" style={{ color: '#8a8a8a' }}>↑ Upload Supabase…</span>}
+                  {!entUploading && entRecordId && <span className="text-xs" style={{ color: '#3a7a3a' }}>✓ Stocké (24h)</span>}
                 </div>
                 {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-3" />}
                 <div className="flex flex-wrap gap-3">
                   <button onClick={resetEntretien} className="btn-secondary px-3 py-2 text-xs">
-                    â†º Recommencer
+                    ↺ Recommencer
                   </button>
                 </div>
               </div>
             )}
           </section>
 
-          {/* Ã‰tape 2 : transcription */}
+          {/* Étape 2 : transcription */}
           {entAudioBlob && (
             <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
               <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>2. Transcription (Whisper)</h2>
@@ -3372,13 +3372,13 @@ Contraintes :
 
               {entStep === 'transcribing' && (
                 <div className="text-sm" style={{ color: '#5a5a5a' }}>
-                  Transcription en coursâ€¦
+                  Transcription en cours…
                   {entProgress.total > 1 && ` (segment ${entProgress.current}/${entProgress.total})`}
                 </div>
               )}
               {entStep === 'labelling' && (
                 <div className="text-sm" style={{ color: '#5a5a5a' }}>
-                  Ã‰tiquetage MÃ©decin / Patientâ€¦
+                  Étiquetage Médecin / Patient…
                 </div>
               )}
 
@@ -3399,10 +3399,10 @@ Contraintes :
             </section>
           )}
 
-          {/* Ã‰tape 3 : restitution IA */}
+          {/* Étape 3 : restitution IA */}
           {(entStep === 'transcribed' || entStep === 'generating' || entStep === 'done') && (
             <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>3. Observation structurÃ©e</h2>
+              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>3. Observation structurée</h2>
 
               {(entStep === 'transcribed' || entStep === 'done') && (
                 <div className="mb-3">
@@ -3410,17 +3410,17 @@ Contraintes :
                     type="text"
                     value={entContext}
                     onChange={(e) => setEntContext(e.target.value)}
-                    placeholder="Contexte (optionnel) : ex. consultation de mÃ©decine gÃ©nÃ©rale, urgencesâ€¦"
+                    placeholder="Contexte (optionnel) : ex. consultation de médecine générale, urgences…"
                     className="input-field w-full text-sm mb-3"
                   />
                   <button onClick={generateEntNote} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
-                    {entStep === 'done' ? 'â†º RÃ©gÃ©nÃ©rer la restitution' : 'GÃ©nÃ©rer la restitution'}
+                    {entStep === 'done' ? '↺ Régénérer la restitution' : 'Générer la restitution'}
                   </button>
                 </div>
               )}
 
               {entStep === 'generating' && (
-                <div className="text-sm" style={{ color: '#5a5a5a' }}>GÃ©nÃ©ration en coursâ€¦</div>
+                <div className="text-sm" style={{ color: '#5a5a5a' }}>Génération en cours…</div>
               )}
 
               {entNote && (
@@ -3445,7 +3445,7 @@ Contraintes :
                       }}
                       className="btn-secondary px-3 py-1.5 text-xs"
                     >
-                      TÃ©lÃ©charger (.md)
+                      Télécharger (.md)
                     </button>
                   </div>
                 </div>
@@ -3458,11 +3458,11 @@ Contraintes :
             <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="display text-lg" style={{ fontWeight: 600 }}>Mes entretiens (24h)</h2>
-                <button onClick={refreshEntHistory} className="btn-secondary px-3 py-1.5 text-xs">â†» Actualiser</button>
+                <button onClick={refreshEntHistory} className="btn-secondary px-3 py-1.5 text-xs">↻ Actualiser</button>
               </div>
-              {entHistoryLoading && <div className="text-xs" style={{ color: '#8a8a8a' }}>Chargementâ€¦</div>}
+              {entHistoryLoading && <div className="text-xs" style={{ color: '#8a8a8a' }}>Chargement…</div>}
               {!entHistoryLoading && entHistory.length === 0 && (
-                <div className="text-xs" style={{ color: '#8a8a8a' }}>Aucun entretien stockÃ© pour l'instant.</div>
+                <div className="text-xs" style={{ color: '#8a8a8a' }}>Aucun entretien stocké pour l'instant.</div>
               )}
               {entHistory.length > 0 && (
                 <ul className="divide-y" style={{ borderColor: '#e6dfc8' }}>
@@ -3483,8 +3483,8 @@ Contraintes :
                             <span className="ml-2 text-xs" style={{ color: '#8a8a8a' }}>{sizeMo} Mo</span>
                           </div>
                           <div className="text-xs" style={{ color: '#8a8a8a' }}>
-                            {row.note ? 'âœ“ Restitution' : (row.transcript ? 'âœ“ Transcrit' : 'Audio brut')}
-                            <span className="ml-2">Â· expire dans {remainH}h{String(remainM).padStart(2, '0')}</span>
+                            {row.note ? '✓ Restitution' : (row.transcript ? '✓ Transcrit' : 'Audio brut')}
+                            <span className="ml-2">· expire dans {remainH}h{String(remainM).padStart(2, '0')}</span>
                           </div>
                         </div>
                         <button onClick={() => restoreEntretien(row)} className="btn-secondary px-3 py-1.5 text-xs">Ouvrir</button>
@@ -3519,7 +3519,7 @@ Contraintes :
 
       {mode !== 'analyse' && mode !== 'entretien' && (
         <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
-          Tout tourne dans le navigateur. Ta clÃ© OpenAI est stockÃ©e localement et n'est envoyÃ©e qu'Ã  api.openai.com.
+          Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
           Les PDF ne quittent jamais ta machine.
         </footer>
       )}
