@@ -10,6 +10,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <style>
 :root{
   --bg:#F5F0E8;--ink:#0F0D0A;--ink2:#2A2722;
@@ -253,8 +260,8 @@ input.f:focus{border-color:var(--ink);}
     <div id="upload-zone">
       <label class="dropzone" for="fi">
         <span class="big ff">D&eacute;poser le fichier</span>
-        <span class="hint mono">.xlsx &middot; .xls &middot; .csv &mdash; 1re colonne = identifiants, suivantes = &eacute;preuves</span>
-        <input type="file" id="fi" accept=".xlsx,.xls,.csv">
+        <span class="hint mono">.xlsx &middot; .xls &middot; .csv &middot; .pdf &mdash; 1re colonne = identifiants, suivantes = &eacute;preuves</span>
+        <input type="file" id="fi" accept=".xlsx,.xls,.csv,.pdf">
       </label>
       <p class="notice">Traitement 100 % local &mdash; aucune donn&eacute;e n'est envoy&eacute;e sur internet.</p>
     </div>
@@ -368,13 +375,92 @@ function parseBody(body,hdrs,idCol){
   return{subjects:subs.map(s=>s.name),students};
 }
 
+// Extrait un tableau 2D [[h1,h2,...], [v1,v2,...], ...] depuis un PDF.
+// Reconstruit les lignes par regroupement Y, et les colonnes par clustering X.
+async function extractRowsFromPdf(file){
+  if(!window.pdfjsLib)throw new Error('pdf.js non chargé');
+  const buf=await file.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const allItems=[]; // {x, y (cumulative), str, page}
+  let yOffset=0;
+  for(let i=1;i<=pdf.numPages;i++){
+    const page=await pdf.getPage(i);
+    const vp=page.getViewport({scale:1});
+    const tc=await page.getTextContent();
+    for(const it of tc.items){
+      if(!it.str||!it.str.trim())continue;
+      // pdf.js: transform[5] = y depuis bas. On normalise en y descendant.
+      const x=it.transform[4];
+      const y=vp.height-it.transform[5]+yOffset;
+      allItems.push({x,y,str:String(it.str).trim(),w:it.width||0});
+    }
+    yOffset+=vp.height+10;
+  }
+  if(!allItems.length)throw new Error('PDF sans texte sélectionnable (scanné ?). Convertis-le en .xlsx ou utilise un OCR avant.');
+  // Regroupement par lignes : tolérance Y de 4 px
+  allItems.sort((a,b)=>a.y-b.y||a.x-b.x);
+  const lines=[];let cur=[];let lastY=null;
+  for(const it of allItems){
+    if(lastY===null||Math.abs(it.y-lastY)<=4)cur.push(it);
+    else{if(cur.length)lines.push(cur);cur=[it];}
+    lastY=it.y;
+  }
+  if(cur.length)lines.push(cur);
+  // Détection des colonnes : on prend la ligne avec le plus d'items (probable header)
+  // et on utilise leurs positions X comme centres de colonnes.
+  const reference=lines.slice().sort((a,b)=>b.length-a.length)[0];
+  const colCenters=reference.map(it=>it.x).sort((a,b)=>a-b);
+  if(colCenters.length<2)throw new Error('Impossible de détecter les colonnes du PDF.');
+  // Largeur moyenne entre colonnes pour définir les bornes
+  const avgGap=(colCenters[colCenters.length-1]-colCenters[0])/(colCenters.length-1)||50;
+  // Affecte chaque item à la colonne la plus proche
+  const assignCol=(x)=>{
+    let best=0,bestD=Infinity;
+    for(let c=0;c<colCenters.length;c++){
+      const d=Math.abs(x-colCenters[c]);
+      if(d<bestD){bestD=d;best=c;}
+    }
+    return bestD<avgGap*0.7?best:-1;
+  };
+  // Construit la matrice
+  const rows=[];
+  for(const line of lines){
+    line.sort((a,b)=>a.x-b.x);
+    const row=new Array(colCenters.length).fill(null);
+    for(const it of line){
+      const c=assignCol(it.x);
+      if(c<0)continue;
+      row[c]=row[c]?(row[c]+' '+it.str):it.str;
+    }
+    // Conversion en nombre quand possible
+    const cleaned=row.map(v=>{
+      if(v==null)return null;
+      const s=String(v).trim();
+      if(!s)return null;
+      // Format français : virgule décimale
+      const num=Number(s.replace(',','.').replace(/\s/g,''));
+      return Number.isFinite(num)?num:s;
+    });
+    // Ignore les lignes vides
+    if(cleaned.some(v=>v!=null&&v!==''))rows.push(cleaned);
+  }
+  if(rows.length<2)throw new Error('PDF parsé mais moins de 2 lignes utiles trouvées.');
+  return rows;
+}
+
 async function handleFile(file){
   if(!file)return;showErr('');
   try{
-    const buf=await file.arrayBuffer();
-    const wb=XLSX.read(buf,{type:'array',cellDates:false});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const all=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,blankrows:false});
+    const isPdf=/\.pdf$/i.test(file.name);
+    let all;
+    if(isPdf){
+      all=await extractRowsFromPdf(file);
+    }else{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:'array',cellDates:false});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      all=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,blankrows:false});
+    }
     if(!all||all.length<2)throw new Error('Fichier vide ou sans ligne de données.');
     const hdrs=all[0].map(h=>h==null?'':String(h).trim());
     const body=all.slice(1);

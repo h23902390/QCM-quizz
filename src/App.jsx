@@ -762,17 +762,137 @@ Contraintes :
     return { enonce, expected, variants };
   };
 
+  // ---------- Extraction PPTX (PowerPoint) ----------
+  // Pour chaque slide, retourne { pageNum, text, type, correctSet, ... }
+  // compatible avec le pipeline PDF en aval. Détection « vert » lue
+  // directement depuis les couleurs XML (<a:srgbClr val="..."/>),
+  // donc pas de rendu canvas.
+  const extractPptxPages = async (f, onProgress) => {
+    if (!window.JSZip) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+        s.onload = res; s.onerror = () => rej(new Error('JSZip CDN failed'));
+        document.head.appendChild(s);
+      });
+    }
+    const buf = await f.arrayBuffer();
+    const zip = await window.JSZip.loadAsync(buf);
+    const slideNames = Object.keys(zip.files)
+      .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a, b) => {
+        const na = parseInt(a.match(/slide(\d+)\.xml/)[1], 10);
+        const nb = parseInt(b.match(/slide(\d+)\.xml/)[1], 10);
+        return na - nb;
+      });
+    const total = slideNames.length;
+    const pages = [];
+    for (let i = 0; i < total; i++) {
+      onProgress?.({ current: i + 1, total, label: `Slide ${i + 1}/${total}` });
+      const xml = await zip.files[slideNames[i]].async('string');
+      const doc = new DOMParser().parseFromString(xml, 'application/xml');
+      const ps = doc.getElementsByTagNameNS('*', 'p');
+      let allText = '';
+      const greenLetters = new Set();
+      for (let pi = 0; pi < ps.length; pi++) {
+        const para = ps[pi];
+        const runs = para.getElementsByTagNameNS('*', 'r');
+        let lineText = '';
+        let greenChars = 0, totalChars = 0;
+        for (let ri = 0; ri < runs.length; ri++) {
+          const r = runs[ri];
+          const tEls = r.getElementsByTagNameNS('*', 't');
+          let runText = '';
+          for (let ti = 0; ti < tEls.length; ti++) runText += tEls[ti].textContent || '';
+          if (!runText) continue;
+          let isGreen = false;
+          const rPr = r.getElementsByTagNameNS('*', 'rPr')[0];
+          if (rPr) {
+            const fill = rPr.getElementsByTagNameNS('*', 'solidFill')[0];
+            if (fill) {
+              const srgb = fill.getElementsByTagNameNS('*', 'srgbClr')[0];
+              if (srgb) {
+                const hex = srgb.getAttribute('val') || '';
+                if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+                  const r0 = parseInt(hex.slice(0, 2), 16);
+                  const g0 = parseInt(hex.slice(2, 4), 16);
+                  const b0 = parseInt(hex.slice(4, 6), 16);
+                  if (g0 > r0 + 18 && g0 > b0 + 18 && g0 > 60) isGreen = true;
+                }
+              }
+            }
+          }
+          lineText += runText;
+          totalChars += runText.length;
+          if (isGreen) greenChars += runText.length;
+        }
+        if (lineText.trim()) {
+          const isLineGreen = totalChars > 0 && greenChars / totalChars > 0.4;
+          const m = lineText.trim().match(/^\s*([A-Ea-e])\s*[\.\)\-:\/]?\s+\S/);
+          if (isLineGreen && m) greenLetters.add(m[1].toUpperCase());
+          allText += lineText + '\n';
+        }
+      }
+      pages.push({
+        pageNum: i + 1,
+        text: allText,
+        type: classifyPage(allText),
+        correctSet: greenLetters,
+        ocrUsed: false,
+        detectionError: false,
+        imageDataUrl: null,
+      });
+    }
+    return pages;
+  };
+
   const handleFile = async (f) => {
     if (!f) return;
-    if (!/\.pdf$/i.test(f.name)) { setError('Seul le format PDF est supporté pour l\'instant.'); return; }
-    if (!libsReady) { setError('Bibliothèques en cours de chargement, réessaie.'); return; }
+    const isPdf = /\.pdf$/i.test(f.name);
+    const isPptx = /\.pptx$/i.test(f.name);
+    if (!isPdf && !isPptx) { setError('Formats supportés : PDF ou PPTX (PowerPoint).'); return; }
+    if (isPdf && !libsReady) { setError('Bibliothèques en cours de chargement, réessaie.'); return; }
     setError(null);
     setQuestions([]); setPages([]); setResults([]);
-    setFilename(f.name.replace(/\.pdf$/i, ''));
+    setFilename(f.name.replace(/\.(pdf|pptx)$/i, ''));
     setProcessing(true);
-    setProgress({ current: 0, total: 0, label: 'Lecture du PDF…' });
+    setProgress({ current: 0, total: 0, label: isPptx ? 'Lecture du PPTX…' : 'Lecture du PDF…' });
 
     try {
+      // Branche PPTX : pipeline simplifié (pas de rendu canvas)
+      if (isPptx) {
+        const rawPages = await extractPptxPages(f, p => setProgress(p));
+        const bank = [];
+        let currentContext = null;
+        for (const p of rawPages) {
+          if (p.type === 'context') { currentContext = p.text; continue; }
+          if (p.type === 'qcm') {
+            const enonce = parseQCMEnonce(p.text);
+            const options = parseOptions(p.text, p.correctSet);
+            if (options.length >= 2) {
+              bank.push({
+                id: `s${p.pageNum}`, pageNum: p.pageNum, type: 'qcm',
+                context: currentContext, enonce, options,
+                imageDataUrl: null, detectionError: false,
+                hasNoCorrect: options.every(o => !o.correct),
+              });
+            }
+          } else if (p.type === 'qroc') {
+            const { enonce, expected, variants } = parseQROC(p.text);
+            bank.push({
+              id: `s${p.pageNum}`, pageNum: p.pageNum, type: 'qroc',
+              context: currentContext, enonce, expected, variants,
+              imageDataUrl: null, hasNoAnswer: !expected,
+            });
+          }
+        }
+        setPages(rawPages.map(({ correctSet, ...rest }) => rest));
+        setQuestions(bank);
+        setMode('extract');
+        return;
+      }
+
+      // Branche PDF : pipeline existant
       const buf = await f.arrayBuffer();
       const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
       const total = pdf.numPages;
@@ -1356,15 +1476,17 @@ Contraintes :
                 padding: '64px 32px', minHeight: '280px',
               }}
             >
-              <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" className="hidden"
+              <input ref={fileInputRef} type="file"
+                accept=".pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                className="hidden"
                 onChange={e => handleFile(e.target.files?.[0])} />
               <div className="display text-2xl md:text-3xl mb-2" style={{ fontWeight: 500 }}>
-                {processing ? 'Extraction en cours…' : 'Dépose un PDF de cours corrigé'}
+                {processing ? 'Extraction en cours…' : 'Dépose un PDF ou PPTX de cours corrigé'}
               </div>
               <div className="text-sm" style={{ color: '#5a5a5a' }}>
                 {processing
                   ? `${progress.label} (${progress.current}/${progress.total})`
-                  : 'Détection automatique des bonnes réponses + mode quiz interactif'}
+                  : 'Détection automatique des bonnes réponses (texte vert) + mode quiz interactif'}
               </div>
               {processing && progress.total > 0 && (
                 <div className="w-full max-w-md mt-6 h-1" style={{ background: '#d6d0c1' }}>
