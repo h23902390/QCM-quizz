@@ -53,6 +53,32 @@ create policy "ecos_cases_owner_update" on public.ecos_cases
 create policy "ecos_cases_owner_delete" on public.ecos_cases
   for delete using (auth.uid() = user_id);
 
+-- ---------- ECOS attempts (historique dernier passage par cas) ----------
+create table if not exists public.ecos_attempts (
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
+  case_id text not null,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, case_id)
+);
+
+alter table public.ecos_attempts enable row level security;
+
+drop policy if exists "ecos_attempts_owner_select" on public.ecos_attempts;
+drop policy if exists "ecos_attempts_owner_insert" on public.ecos_attempts;
+drop policy if exists "ecos_attempts_owner_update" on public.ecos_attempts;
+drop policy if exists "ecos_attempts_owner_delete" on public.ecos_attempts;
+
+create policy "ecos_attempts_owner_select" on public.ecos_attempts
+  for select using (auth.uid() = user_id);
+create policy "ecos_attempts_owner_insert" on public.ecos_attempts
+  for insert with check (auth.uid() = user_id);
+create policy "ecos_attempts_owner_update" on public.ecos_attempts
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "ecos_attempts_owner_delete" on public.ecos_attempts
+  for delete using (auth.uid() = user_id);
+
 -- ---------- Analyses partiels sauvegardées ----------
 create table if not exists public.analyses (
   id uuid primary key default gen_random_uuid(),

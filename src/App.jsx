@@ -3,6 +3,7 @@ import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
   listEcosCases, upsertEcosCases, deleteEcosCase as deleteEcosCaseRemote,
+  listEcosAttempts, upsertEcosAttempt,
   uploadEntretien, listEntretiens, updateEntretien, deleteEntretien,
   purgeExpiredEntretiens, downloadEntretienBlob,
 } from './lib/supabase';
@@ -88,6 +89,11 @@ const classifyPixel = (r, g, b) => {
   return 'other';
 };
 
+const cleanMarkdownNoise = (s = '') => s
+  .replace(/^#{1,6}\s*/gm, '')
+  .replace(/^\s*[-*]\s+/gm, '• ')
+  .replace(/`{1,3}/g, '');
+
 // ---------- Component ----------
 export default function App() {
   // App state
@@ -170,6 +176,9 @@ export default function App() {
   const [ecosImportFilename, setEcosImportFilename] = useState('');
   const [ecosBuiltInConverting, setEcosBuiltInConverting] = useState(false);
   const [ecosBuiltInProgress, setEcosBuiltInProgress] = useState({ current: 0, total: 0 });
+  const [ecosAttempts, setEcosAttempts] = useState([]);
+  const [ecosPendingAttempt, setEcosPendingAttempt] = useState(null);
+  const [ecosCategory, setEcosCategory] = useState('all');
   const ecosImportInputRef = useRef(null);
 
   // ---------- Entretien (écoute + restitution IA) ----------
@@ -596,7 +605,7 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
           { role: 'system', content: ecosCase.briefPatient },
           ...newMessages,
         ],
-        temperature: 0.7,
+        temperature: 0.2,
       };
       const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -692,7 +701,16 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
         messages: [
           {
             role: 'system',
-            content: `Tu es un examinateur ECOS rigoureux mais bienveillant en médecine. Tu évalues la performance d'un candidat sur un cas clinique simulé. Réponds STRICTEMENT en JSON valide avec la structure : {"items":[{"section":"...","critere":"...","pointsMax":n,"pointsObtenus":n,"commentaire":"..."},...],"feedbackGlobal":"...","pointsForts":["..."],"axesAmelioration":["..."]}. Sois juste : note 0 si critère non abordé, note partielle si abordé incomplètement, note maxi si bien fait. Total /${totalPoints}, à ramener à /20.`,
+            content: `Tu es un examinateur ECOS strict, constant et déterministe. Tu dois noter UNIQUEMENT à partir de la grille fournie et du transcript fourni.
+Règles impératives:
+1) Évalue TOUS les items de la grille, dans le même ordre.
+2) pointsObtenus est borné entre 0 et pointsMax.
+3) Si un critère n'est pas explicitement présent dans le transcript, mettre 0.
+4) Pas d'invention: aucune information absente du transcript.
+5) Commentaires courts, factuels, citant le comportement observé.
+Réponds STRICTEMENT en JSON valide:
+{"items":[{"section":"...","critere":"...","pointsMax":n,"pointsObtenus":n,"commentaire":"..."}],"feedbackGlobal":"...","pointsForts":["..."],"axesAmelioration":["..."]}.
+Total /${totalPoints}, ensuite cohérent avec une note /20.`,
           },
           {
             role: 'user',
@@ -715,6 +733,21 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
       const raw = data.choices?.[0]?.message?.content || '{}';
       const parsed = JSON.parse(raw);
       setEcosEvaluation(parsed);
+      if (session) {
+        setEcosPendingAttempt({
+          case_id: ecosCase.id,
+          data: {
+            caseId: ecosCase.id,
+            caseTitle: ecosCase.titre,
+            specialite: ecosCase.specialite,
+            finishedAt: new Date().toISOString(),
+            durationSec: ecosStartedAt ? Math.max(0, Math.round((Date.now() - ecosStartedAt) / 1000)) : null,
+            evaluation: parsed,
+          },
+        });
+      } else {
+        setEcosPendingAttempt(null);
+      }
       setMode('ecos-results');
     } catch (e) {
       setEcosError('Erreur évaluation : ' + e.message);
@@ -934,7 +967,17 @@ Contraintes :
         console.warn('listEcosCases', e);
       }
     })();
+    listEcosAttempts().then(setEcosAttempts).catch(e => console.warn('listEcosAttempts', e));
   }, [session]);
+
+  const allEcosCases = useMemo(() => [...ECOS_CASES, ...customCases], [customCases]);
+  const ecosCategories = useMemo(() => {
+    const arr = Array.from(new Set(allEcosCases.map(c => c?.specialite).filter(Boolean)));
+    return arr.sort((a, b) => a.localeCompare(b, 'fr'));
+  }, [allEcosCases]);
+  const visibleEcosCases = useMemo(() => (
+    allEcosCases.filter(c => ecosCategory === 'all' ? true : c.specialite === ecosCategory)
+  ), [allEcosCases, ecosCategory]);
 
   const persistKey = (k) => {
     setApiKey(k);
@@ -2154,6 +2197,13 @@ Contraintes :
                   : `Convertir les ${ECOS_BUILTIN_RAW.length} ECOS intégrés (Fac)`}
               </button>
             </div>
+            <div className="mb-4 flex items-center gap-2">
+              <label className="mono text-xs" style={{ color: '#5a5a5a' }}>Catégorie</label>
+              <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1">
+                <option value="all">Toutes</option>
+                {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
 
             {ecosImportOpen && (
               <div className="p-4 mb-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
@@ -2190,7 +2240,7 @@ Contraintes :
             )}
 
             <div className="grid md:grid-cols-2 gap-4">
-              {ECOS_CASES.map(c => (
+              {visibleEcosCases.filter(c => !customCases.find(cc => cc.id === c.id)).map(c => (
                 <div key={c.id} className="card-hover p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
                   onClick={() => startEcos(c)}>
                   <div className="flex items-baseline justify-between mb-2">
@@ -2201,9 +2251,14 @@ Contraintes :
                   <div className="text-xs" style={{ color: '#5a5a5a' }}>
                     Grille : {c.grilleCorrection.length} items · {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
                   </div>
+                  {ecosAttempts.find(a => a.case_id === c.id)?.data?.finishedAt && (
+                    <div className="mono text-[10px] mt-2" style={{ color: '#8a8a8a' }}>
+                      Dernier passage: {new Date(ecosAttempts.find(a => a.case_id === c.id).data.finishedAt).toLocaleString('fr-FR')}
+                    </div>
+                  )}
                 </div>
               ))}
-              {customCases.map(c => (
+              {visibleEcosCases.filter(c => customCases.find(cc => cc.id === c.id)).map(c => (
                 <div key={c.id} className="card-hover p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div onClick={() => startEcos(c)} className="cursor-pointer">
                     <div className="flex items-baseline justify-between mb-2 gap-2">
@@ -2214,6 +2269,11 @@ Contraintes :
                     <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
                       Grille : {(c.grilleCorrection || []).length} items · {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
                     </div>
+                    {ecosAttempts.find(a => a.case_id === c.id)?.data?.finishedAt && (
+                      <div className="mono text-[10px] mt-2" style={{ color: '#8a8a8a' }}>
+                        Dernier passage: {new Date(ecosAttempts.find(a => a.case_id === c.id).data.finishedAt).toLocaleString('fr-FR')}
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-between items-center mt-2">
                     <span className="mono text-[10px] px-2 py-0.5" style={{
@@ -2274,7 +2334,7 @@ Contraintes :
             <div className="grid md:grid-cols-3 gap-4">
               <div className="md:col-span-1 p-5 border self-start" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                 <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Consigne candidat</div>
-                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{ecosCase.consigneCandidat}</div>
+                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{cleanMarkdownNoise(ecosCase.consigneCandidat)}</div>
               </div>
 
               <div className="md:col-span-2 border flex flex-col" style={{ borderColor: '#d6d0c1', background: '#fff', minHeight: '60vh' }}>
@@ -2379,6 +2439,31 @@ Contraintes :
                   className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
                 <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
               </div>
+              {session && (
+                <div className="flex justify-center gap-2 mt-3">
+                  <button
+                    onClick={async () => {
+                      if (!ecosPendingAttempt) return;
+                      try {
+                        await upsertEcosAttempt(ecosPendingAttempt);
+                        setEcosAttempts(prev => [ecosPendingAttempt, ...prev.filter(a => a.case_id !== ecosPendingAttempt.case_id)]);
+                        setEcosPendingAttempt(null);
+                      } catch (e) {
+                        setEcosError('Erreur sauvegarde ECOS : ' + e.message);
+                      }
+                    }}
+                    disabled={!ecosPendingAttempt}
+                    className="btn-primary px-4 py-2 text-xs"
+                  >
+                    {ecosPendingAttempt ? 'Enregistrer ce passage ECOS' : 'Passage déjà enregistré'}
+                  </button>
+                  {ecosPendingAttempt && (
+                    <button onClick={() => setEcosPendingAttempt(null)} className="btn-secondary px-4 py-2 text-xs">
+                      Ne pas enregistrer
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Score par section</h3>
@@ -2442,6 +2527,21 @@ Contraintes :
                       <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{obt} / {max}</span>
                     </div>
                     {it.commentaire && <div className="text-xs italic" style={{ color: '#5a5a5a' }}>{it.commentaire}</div>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Grille claire des points</h3>
+            <div className="space-y-2 mb-8">
+              {(ecosCase.grilleCorrection || []).map((g, i) => {
+                const got = (ecosEvaluation.items || []).find(it => (it.critere || '').trim() === (g.critere || '').trim());
+                return (
+                  <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="text-sm"><strong>{g.section}</strong> — {g.critere}</div>
+                      <div className="mono text-xs" style={{ color: '#5a5a5a' }}>{Number(got?.pointsObtenus || 0)} / {Number(g.points || 0)}</div>
+                    </div>
                   </div>
                 );
               })}
@@ -3054,7 +3154,7 @@ Contraintes :
 
       {mode === 'analyse' && (
         <iframe
-          src={`/analyse-partiels.html${supabaseEnabled ? `?su=${encodeURIComponent(import.meta.env.VITE_SUPABASE_URL)}&sk=${encodeURIComponent(import.meta.env.VITE_SUPABASE_ANON_KEY)}` : ''}`}
+          src={`/analyse-partiels.html${supabaseEnabled ? `?su=${encodeURIComponent(import.meta.env.VITE_SUPABASE_URL)}&sk=${encodeURIComponent(import.meta.env.VITE_SUPABASE_ANON_KEY)}${session?.access_token ? `&at=${encodeURIComponent(session.access_token)}` : ''}${session?.refresh_token ? `&rt=${encodeURIComponent(session.refresh_token)}` : ''}` : ''}`}
           title="Analyse des partiels"
           style={{
             width: '100%',
