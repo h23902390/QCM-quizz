@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analyse des partiels</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;1,9..144,300;1,9..144,400;1,9..144,500&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --bg:#F5F0E8;--ink:#0F0D0A;--ink2:#2A2722;
+  --muted:#7A7060;--muted2:#5C5648;
+  --line:#DDD4BE;--linef:#EDE6D4;
+  --card:#FFFFFF;--cardalt:#FAF6EC;
+  --a1:#A3243A;--a1s:rgba(163,36,58,.10);--a1m:rgba(163,36,58,.22);
+  --a2:#1B5470;--a2s:rgba(27,84,112,.10);--a2m:rgba(27,84,112,.22);
+  --ok:#2D7A4A;--oks:rgba(45,122,74,.12);
+  --bar:#C9BBAB;--errbg:#FBE9EC;
+}
+*,*::before,*::after{box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+html,body{margin:0;padding:0;}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:14px;line-height:1.55;min-height:100vh;}
+.ff{font-family:'Fraunces',Georgia,serif;font-variation-settings:'SOFT' 40,'opsz' 96;letter-spacing:-.015em;}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-feature-settings:'tnum' 1;}
+.w{max-width:1120px;margin:0 auto;padding:0 20px;}
+@media(min-width:768px){.w{padding:0 40px;}}
+
+header{border-bottom:1px solid var(--line);padding:28px 0 32px;background:var(--bg);}
+@media(min-width:768px){header{padding:36px 0 42px;}}
+.hrow{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:16px;}
+.htag{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+h1{font-size:36px;margin:10px 0 0;line-height:.92;font-weight:400;}
+h1 em{color:var(--a1);}
+@media(min-width:768px){h1{font-size:60px;}}
+.hmeta{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:right;}
+
+main{padding:40px 0 100px;display:flex;flex-direction:column;gap:44px;}
+@media(min-width:768px){main{padding:52px 0 120px;gap:56px;}}
+
+.shead{display:flex;align-items:baseline;gap:18px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--line);}
+.snum{font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:300;font-size:22px;color:var(--a1);flex-shrink:0;}
+.shead h2{margin:0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:22px;letter-spacing:-.01em;}
+@media(min-width:768px){.shead h2{font-size:28px;}}
+.rhead{display:flex;align-items:baseline;gap:16px;margin:40px 0 18px;padding-bottom:12px;border-bottom:1px solid var(--line);}
+.rnum{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.2em;color:var(--a1);font-weight:500;}
+.rhead h2{margin:0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:24px;letter-spacing:-.01em;}
+.rhead h2 em{font-style:italic;font-weight:300;}
+@media(min-width:768px){.rhead h2{font-size:30px;}}
+
+.dropzone{display:block;border:1.5px dashed var(--line);background:var(--card);padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;}
+@media(min-width:768px){.dropzone{padding:60px 24px;}}
+.dropzone:hover{border-color:var(--ink);background:var(--cardalt);}
+.dropzone .big{font-family:'Fraunces',Georgia,serif;font-size:28px;font-style:italic;font-weight:300;display:block;letter-spacing:-.01em;}
+@media(min-width:768px){.dropzone .big{font-size:38px;}}
+.dropzone .hint{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-top:8px;letter-spacing:.04em;}
+.dropzone input{display:none;}
+.notice{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:12px 0 0;letter-spacing:.02em;}
+
+.finfo{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--ok);padding:18px 22px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;}
+.finfo .left{display:flex;align-items:center;gap:14px;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex-shrink:0;box-shadow:0 0 0 4px var(--oks);}
+.fname{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;}
+.fsub{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:3px;}
+.lbtn{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);text-decoration:underline;text-underline-offset:4px;background:none;border:none;cursor:pointer;padding:0;letter-spacing:.04em;}
+.lbtn:hover{color:var(--ink);}
+
+.crow{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end;margin-top:20px;}
+.clabel{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;font-weight:500;}
+select.f{font-family:'IBM Plex Mono',monospace;font-size:12px;border:1px solid var(--line);padding:9px 14px;background:white;color:var(--ink);min-width:220px;cursor:pointer;}
+select.f:focus{outline:none;border-color:var(--ink);}
+.seg{display:flex;border:1px solid var(--line);}
+.seg button{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:9px 16px;border:none;border-right:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;letter-spacing:.04em;}
+.seg button:last-child{border-right:none;}
+.seg button.on{background:var(--ink);color:var(--bg);}
+
+.tw{border:1px solid var(--line);background:var(--card);overflow-x:auto;margin-top:20px;}
+table{width:100%;border-collapse:collapse;font-family:'IBM Plex Mono',monospace;font-size:11px;font-variant-numeric:tabular-nums;}
+thead tr{background:var(--cardalt);border-bottom:1.5px solid var(--line);}
+th{text-align:right;padding:11px 12px;font-weight:500;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);white-space:nowrap;}
+th:first-child{text-align:left;padding-left:16px;}
+td{padding:8px 12px;text-align:right;}
+td:first-child{text-align:left;padding-left:16px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--ink2);}
+tbody tr{border-bottom:1px solid var(--linef);transition:background .12s;}
+tbody tr:last-child{border-bottom:none;}
+tbody tr:hover{background:var(--cardalt);}
+tr.sumrow{background:var(--cardalt);border-top:1.5px solid var(--line);}
+tr.sumrow td{padding:12px 12px;font-weight:600;font-size:12px;}
+tr.sumrow td:first-child{font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;font-size:14px;}
+tr.excl td{opacity:.35;text-decoration:line-through;text-decoration-color:var(--muted);text-decoration-thickness:1px;}
+.etag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;background:var(--muted);color:white;padding:2px 6px;margin-left:8px;vertical-align:1px;}
+.ca{color:var(--a1);font-weight:600;}
+.cb{color:var(--a2);font-weight:600;}
+.cm{color:var(--muted);}
+.pcc{background-image:linear-gradient(90deg,var(--pcc,var(--linef)) 0%,var(--pcc,var(--linef)) var(--pcw,0%),transparent var(--pcw,0%));background-repeat:no-repeat;font-weight:500;}
+
+.chiprow{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
+.chipcnt{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+.chipcnt strong{color:var(--ink);}
+.chipact{display:flex;gap:16px;}
+.chipbox{display:flex;flex-wrap:wrap;gap:8px;padding:18px;background:var(--card);border:1px solid var(--line);}
+.schip{font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:7px 14px;border:1px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px;user-select:none;}
+.schip::before{content:'\2713';font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;}
+.schip.ex{background:transparent;color:var(--muted);border-color:var(--line);text-decoration:line-through;text-decoration-thickness:1px;}
+.schip.ex::before{content:'\00D7';color:var(--muted);}
+
+.tabs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:14px;}
+.tab{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px 16px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;letter-spacing:.04em;transition:all .15s;}
+.tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.tlnk{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px 12px;background:none;border:none;color:var(--muted);text-decoration:underline;text-underline-offset:4px;cursor:pointer;letter-spacing:.04em;}
+.idcard{border:1px solid var(--line);border-left-width:4px;background:var(--card);padding:20px 22px;}
+.idcard.a{border-left-color:var(--a1);}
+.idcard.b{border-left-color:var(--a2);}
+input.f{width:100%;font-family:'IBM Plex Mono',monospace;font-size:17px;padding:12px 14px;border:1px solid var(--line);background:white;outline:none;transition:border-color .15s;}
+input.f:focus{border-color:var(--ink);}
+
+.genbtn{width:100%;padding:26px 24px;font-family:'Fraunces',Georgia,serif;font-variation-settings:'SOFT' 40,'opsz' 96;font-style:italic;font-weight:400;font-size:26px;letter-spacing:-.02em;background:var(--ink);color:var(--bg);border:none;cursor:pointer;transition:all .2s;}
+@media(min-width:768px){.genbtn{font-size:34px;padding:32px 24px;}}
+.genbtn:hover:not(:disabled){background:var(--a1);}
+.genbtn:disabled{background:var(--linef);color:var(--muted);cursor:not-allowed;}
+.errbox{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:14px 16px;border:1px solid var(--a1);border-left-width:4px;background:var(--errbg);color:var(--a1);letter-spacing:.02em;}
+
+#sec-results{animation:fi .45s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.rmeta{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:12px;padding:16px 0;border-top:2px solid var(--ink);border-bottom:1px solid var(--line);margin-bottom:36px;}
+.rtitle{font-family:'Fraunces',Georgia,serif;font-weight:400;font-size:18px;font-style:italic;letter-spacing:-.01em;margin:0;}
+.rmetaright{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.rdate{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);}
+
+.pdfbtn{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:9px 18px;background:var(--a1);color:white;border:none;cursor:pointer;letter-spacing:.08em;display:inline-flex;align-items:center;gap:8px;transition:opacity .15s;flex-shrink:0;}
+.pdfbtn:hover{opacity:.85;}
+.pdfbtn:disabled{opacity:.5;cursor:not-allowed;}
+.pdfbtn svg{width:14px;height:14px;fill:currentColor;flex-shrink:0;}
+.pdfbtn .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.herogrid{display:grid;grid-template-columns:1fr;gap:16px;margin-bottom:40px;}
+@media(min-width:768px){.herogrid.two{grid-template-columns:1fr 1fr;}}
+.herocard{background:var(--card);border:1px solid var(--line);border-top:4px solid;padding:24px 24px 26px;}
+.herocard.a{border-top-color:var(--a1);}
+.herocard.b{border-top-color:var(--a2);}
+.hchd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;gap:12px;flex-wrap:wrap;}
+.hclabel{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+.hcid{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink2);}
+.hcbody{display:grid;grid-template-columns:1fr auto;gap:16px;align-items:start;}
+@media(max-width:480px){.hcbody{grid-template-columns:1fr;}}
+.hcmain{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;margin-bottom:18px;}
+.kval{font-family:'Fraunces',Georgia,serif;font-variation-settings:'SOFT' 30,'opsz' 144;font-size:48px;line-height:.9;font-weight:400;letter-spacing:-.03em;}
+@media(min-width:768px){.kval{font-size:62px;}}
+.klabel{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-top:7px;}
+.ksub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:3px;}
+.kright{text-align:right;}
+.badge{display:inline-block;padding:4px 10px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;font-weight:600;margin-top:4px;}
+.bg-top{background:var(--ok);color:white;}
+.bg-up{background:var(--a1);color:white;}
+.bg-mid{background:var(--line);color:var(--ink);}
+.bg-low{background:var(--muted);color:white;}
+
+.pctbar{margin-top:16px;padding-top:14px;border-top:1px solid var(--linef);}
+.ptrow{display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;gap:8px;}
+.ptrow .ptval{color:var(--ink);font-weight:600;font-size:12px;white-space:nowrap;flex-shrink:0;}
+.ptrack{height:6px;background:var(--linef);position:relative;}
+.pfill{position:absolute;left:0;top:0;bottom:0;transition:width .7s ease;}
+.herocard.a .pfill{background:var(--a1);}
+.herocard.b .pfill{background:var(--a2);}
+.pmark{position:absolute;top:-5px;bottom:-5px;width:2px;transform:translateX(-50%);}
+.herocard.a .pmark{background:var(--a1);}
+.herocard.b .pmark{background:var(--a2);}
+
+.radar-wrap{flex-shrink:0;width:130px;height:130px;}
+@media(min-width:768px){.radar-wrap{width:160px;height:160px;}}
+@media(max-width:480px){.radar-wrap{width:100%;height:160px;}}
+.radar-wrap svg{width:100%;height:100%;}
+
+.dchips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px;}
+.dchip{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:6px 12px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;letter-spacing:.02em;transition:all .15s;}
+.dchip:hover{border-color:var(--ink);}
+.dchip.on{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.dchip.ex{color:var(--muted);background:var(--linef);}
+
+.hcard{border:1px solid var(--line);background:var(--card);padding:24px 22px 20px;margin-bottom:20px;}
+.hhd{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--linef);}
+.hhd h3{margin:0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-weight:400;font-size:20px;letter-spacing:-.01em;}
+.hhd .hst{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.02em;}
+.harea{position:relative;height:200px;margin-top:14px;}
+.hgrid{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;padding-left:28px;}
+.hgl{border-top:1px dashed var(--linef);width:100%;position:relative;}
+.hgl span{position:absolute;left:-28px;top:-8px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);text-align:right;width:24px;}
+.hchart{position:relative;height:100%;display:flex;align-items:flex-end;gap:2px;padding-left:28px;}
+.hbar{flex:1;background:var(--bar);min-height:1px;position:relative;transition:background .15s;}
+.hbar:hover{background:var(--muted);}
+.hbar.a1{background:var(--a1);}
+.hbar.a2{background:var(--a2);}
+.hbar.both{background:#5A2E3F;}
+.hline{position:absolute;top:0;bottom:0;width:0;pointer-events:none;z-index:2;}
+.hline.median{border-left:1.5px dashed var(--ink);}
+.hline.q{border-left:1px dashed var(--muted);opacity:.5;}
+.hline.s1{border-left:2px solid var(--a1);}
+.hline.s2{border-left:2px solid var(--a2);}
+.haxis{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-top:8px;padding-left:28px;letter-spacing:.04em;}
+.hleg{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--linef);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.li{display:flex;align-items:center;gap:8px;}
+.ls{width:16px;height:2px;flex-shrink:0;}
+.ls.d{background:none;border-top:1.5px dashed currentColor;}
+.ls.s{background:currentColor;}
+
+.method{margin-top:44px;padding:20px 24px;background:var(--cardalt);border-left:3px solid var(--muted);font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--muted2);line-height:1.7;}
+.method .tag{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.2em;color:var(--ink);font-weight:600;}
+.method code{font-family:'IBM Plex Mono',monospace;font-size:11px;background:var(--linef);padding:1px 5px;}
+
+[hidden]{display:none!important;}
+.tw::-webkit-scrollbar{height:5px;}
+.tw::-webkit-scrollbar-thumb{background:var(--line);}
+
+@media print{
+  body{background:white;font-size:12px;}
+  header{padding:20px 0 22px;}
+  h1{font-size:40px;}
+  #sec-upload,#sec-filter,#sec-ids,#sec-gen,#sec-results .rmeta .pdfbtn{display:none!important;}
+  .herocard{break-inside:avoid;box-shadow:none;}
+  .hcard{break-inside:avoid;}
+  main{padding:20px 0 40px;gap:32px;}
+  .tw{overflow:visible;}
+  table{font-size:10px;}
+  td,th{padding:6px 8px;}
+  .rhead{margin:24px 0 12px;}
+  .herogrid{margin-bottom:24px;}
+  .kval{font-size:44px;}
+  .radar-wrap{width:120px;height:120px;}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="w">
+    <div class="hrow">
+      <div>
+        <div class="htag mono">Statistiques de promotion &middot; cohorte anonyme</div>
+        <h1 class="ff"><em>Analyse</em> des partiels</h1>
+      </div>
+      <div class="hmeta" id="hmeta"></div>
+    </div>
+  </div>
+</header>
+
+<main class="w">
+
+  <section id="sec-upload">
+    <div class="shead"><span class="snum ff">I.</span><h2 class="ff">D&eacute;poser le fichier</h2></div>
+    <div id="upload-zone">
+      <label class="dropzone" for="fi">
+        <span class="big ff">D&eacute;poser le fichier</span>
+        <span class="hint mono">.xlsx &middot; .xls &middot; .csv &mdash; 1re colonne = identifiants, suivantes = &eacute;preuves</span>
+        <input type="file" id="fi" accept=".xlsx,.xls,.csv">
+      </label>
+      <p class="notice">Traitement 100 % local &mdash; aucune donn&eacute;e n'est envoy&eacute;e sur internet.</p>
+    </div>
+    <div id="errbox"></div>
+    <div id="file-loaded" hidden>
+      <div class="finfo">
+        <div class="left"><div class="dot"></div><div><div class="fname mono" id="fname"></div><div class="fsub mono" id="fsub"></div></div></div>
+        <button class="lbtn" id="btnreload">changer de fichier</button>
+      </div>
+      <div class="crow">
+        <div><div class="clabel mono">Colonne identifiant</div><select class="f mono" id="idcolsel"></select></div>
+        <div><div class="clabel mono">&Eacute;chelle</div><div class="seg" id="scaleseg"><button data-v="20">/ 20</button><button data-v="100">/ 100</button></div></div>
+      </div>
+      <div class="tw">
+        <table><thead><tr><th>&Eacute;preuve</th><th>n</th><th>min</th><th>max</th><th>moy.</th><th>absents</th></tr></thead>
+        <tbody id="vtbody"></tbody></table>
+      </div>
+      <p class="notice">Contr&ocirc;le rapide &mdash; si n, min ou max te paraissent incoh&eacute;rents, change la colonne identifiant ou l'&eacute;chelle.</p>
+    </div>
+  </section>
+
+  <section id="sec-filter" hidden>
+    <div class="shead"><span class="snum ff">II.</span><h2 class="ff">Mati&egrave;res &agrave; inclure dans la moyenne</h2></div>
+    <div class="chiprow">
+      <div class="chipcnt mono"><strong id="inccount">0</strong> sur <span id="totcount">0</span> &eacute;preuves incluses</div>
+      <div class="chipact"><button class="lbtn" id="btnallin">tout inclure</button><button class="lbtn" id="btnallout">tout exclure</button></div>
+    </div>
+    <div class="chipbox" id="schips"></div>
+    <p class="notice">Clique sur une mati&egrave;re pour l'exclure de la moyenne g&eacute;n&eacute;rale et du classement.</p>
+  </section>
+
+  <section id="sec-ids" hidden>
+    <div class="shead"><span class="snum ff">III.</span><h2 class="ff">Num&eacute;ro(s) &eacute;tudiant(s)</h2></div>
+    <div class="tabs" id="idtabs">
+      <button class="tab on" data-tab="0">&Eacute;tudiant A</button>
+      <button class="tab" data-tab="1" hidden>&Eacute;tudiant B</button>
+      <button class="tlnk" id="btnaddtab">+ ajouter un second &eacute;tudiant</button>
+      <button class="tlnk" id="btnrmtab" hidden>retirer</button>
+    </div>
+    <div class="idcard a" id="idcard">
+      <div class="clabel mono" id="idlabel">Identifiant de l'&eacute;tudiant A</div>
+      <input type="text" class="f mono" id="idinput" placeholder="ex. 287100150" autocomplete="off">
+    </div>
+  </section>
+
+  <div id="sec-gen" hidden>
+    <button class="genbtn ff" id="btngen" disabled>G&eacute;n&eacute;rer l'analyse &rarr;</button>
+    <p class="notice" id="genhint" style="text-align:center;margin-top:10px;"></p>
+  </div>
+
+  <section id="sec-results" hidden>
+    <div class="rmeta">
+      <h3 class="rtitle ff" id="rtitle">Rapport d'analyse</h3>
+      <div class="rmetaright">
+        <div class="rdate mono" id="rdate"></div>
+        <button class="pdfbtn" id="pdfbtn" onclick="exportPDF()">
+          <svg id="pdf-icon" viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
+          <span id="pdf-label">Exporter PDF</span>
+        </button>
+      </div>
+    </div>
+    <div id="reserr"></div>
+    <div id="block-hero" class="herogrid"></div>
+
+    <div id="block-profile" hidden>
+      <div class="rhead"><span class="rnum mono">01</span><h2 class="ff"><em>Profil</em> &amp; classement d&eacute;taill&eacute;</h2></div>
+      <div class="tw"><table><thead id="pthead"></thead><tbody id="ptbody"></tbody></table></div>
+    </div>
+
+    <div id="block-stats">
+      <div class="rhead"><span class="rnum mono">02</span><h2 class="ff"><em>Statistiques</em> par &eacute;preuve</h2></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>&Eacute;preuve</th><th>n</th><th>moy.</th><th>&sigma;</th><th>min</th><th>P10</th><th>Q1</th><th>m&eacute;diane</th><th>Q3</th><th>P90</th><th>max</th></tr></thead>
+          <tbody id="stbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="block-dist">
+      <div class="rhead"><span class="rnum mono">03</span><h2 class="ff"><em>Distributions</em></h2></div>
+      <div class="dchips" id="dchips"></div>
+      <div id="histcont"></div>
+    </div>
+
+    <div class="method">
+      <span class="tag">M&eacute;thodologie</span> &mdash; Quantiles : interpolation lin&eacute;aire (type 7, &eacute;quivalent numpy/Excel). Rang : comp&eacute;tition standard. Percentile : <code>(n&lt;v + 0,5&middot;n=v) / n</code>. Moyenne g&eacute;n&eacute;rale : arithm&eacute;tique non pond&eacute;r&eacute;e sur les mati&egrave;res incluses. Aucun envoi r&eacute;seau &mdash; traitement 100 % local.
+    </div>
+  </section>
+
+</main>
+<script>
+const sa=a=>[...a].sort((x,y)=>x-y);
+const avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+function Q(s,q){const n=s.length;if(!n)return NaN;if(n===1)return s[0];const h=(n-1)*q,lo=Math.floor(h),hi=Math.ceil(h);return lo===hi?s[lo]:s[lo]+(h-lo)*(s[hi]-s[lo]);}
+function SD(a){if(a.length<2)return 0;const m=avg(a);return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1));}
+function CS(arr){const c=arr.filter(v=>typeof v==='number'&&!isNaN(v));if(!c.length)return null;const s=sa(c);return{n:s.length,mean:avg(s),stdev:SD(s),min:s[0],max:s[s.length-1],p10:Q(s,.1),q1:Q(s,.25),median:Q(s,.5),q3:Q(s,.75),p90:Q(s,.9),sorted:s};}
+function RK(v,s){let a=0;for(const x of s)if(x>v)a++;return a+1;}
+function PC(v,s){const n=s.length;if(!n)return NaN;let b=0,e=0;for(const x of s){if(x<v)b++;else if(x===v)e++;}return((b+.5*e)/n)*100;}
+function BINS(s,mn,mx,k){const w=(mx-mn)/k,bins=[];for(let i=0;i<k;i++)bins.push({x0:mn+i*w,x1:mn+(i+1)*w,count:0});for(const v of s){let i=Math.floor((v-mn)/w);if(i===k)i=k-1;if(i>=0&&i<k)bins[i].count++;}return bins;}
+const fm=(x,d=2)=>x==null||(typeof x==='number'&&isNaN(x))?'—':typeof x!=='number'?String(x):x.toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fi=x=>x==null||(typeof x==='number'&&isNaN(x))?'—':Math.round(x).toLocaleString('fr-FR');
+const fp=x=>x==null||isNaN(x)?'—':`${x.toFixed(1).replace('.',',')} %`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const S={fileName:'',headers:[],rawBody:null,idColIdx:0,subjects:[],rows:null,excluded:new Set(),subStats:{},overall:null,scaleMax:20,tabsCount:1,activeTab:0,ids:['',''],generated:false,stu1:null,stu2:null,selSub:null,reportDate:null};
+
+function parseBody(body,hdrs,idCol){
+  const subs=hdrs.map((h,i)=>({name:h||`Col. ${i+1}`,idx:i})).filter(s=>s.idx!==idCol);
+  const students=body.map(r=>{const id=r?.[idCol];const grades={};for(const s of subs){const v=r?.[s.idx];grades[s.name]=(typeof v==='number'&&!isNaN(v))?v:null;}return{id:id==null?'':String(id).trim(),grades};}).filter(s=>s.id!=='');
+  return{subjects:subs.map(s=>s.name),students};
+}
+
+async function handleFile(file){
+  if(!file)return;showErr('');
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const all=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,blankrows:false});
+    if(!all||all.length<2)throw new Error('Fichier vide ou sans ligne de données.');
+    const hdrs=all[0].map(h=>h==null?'':String(h).trim());
+    const body=all.slice(1);
+    let det=0;
+    for(let c=0;c<hdrs.length;c++){const vals=body.map(r=>r?.[c]).filter(v=>v!=null&&v!=='');if(!vals.length)continue;if(!vals.every(v=>typeof v==='number'&&v>=0&&v<=25)){det=c;break;}}
+    const{subjects:subs,students}=parseBody(body,hdrs,det);
+    let mx=20;for(const r of students)for(const v of Object.values(r.grades))if(typeof v==='number'&&v>mx)mx=v;
+    S.fileName=file.name;S.headers=hdrs;S.rawBody=body;S.idColIdx=det;S.subjects=subs;S.rows=students;S.excluded=new Set();S.scaleMax=mx>20?100:20;S.generated=false;S.selSub=subs[0]||null;
+    recomp();renderAll();
+  }catch(e){showErr(e.message||'Erreur de lecture.');S.rows=null;renderAll();}
+}
+
+function recomp(){
+  S.subStats={};for(const s of S.subjects)S.subStats[s]=CS(S.rows.map(r=>r.grades[s]).filter(v=>v!=null));
+  const inc=S.subjects.filter(s=>!S.excluded.has(s));
+  const byStu={};const vals=[];
+  for(const r of S.rows){const gs=inc.map(s=>r.grades[s]).filter(v=>v!=null);if(gs.length){byStu[r.id]={mean:avg(gs),n:gs.length};vals.push(byStu[r.id].mean);}}
+  S.overall={stats:CS(vals),byStu,inc};
+}
+
+const findStu=id=>{if(!S.rows)return null;const q=(id||'').trim();if(!q)return null;const n=x=>String(x).replace(/\s/g,'');return S.rows.find(r=>r.id===q)||S.rows.find(r=>n(r.id)===n(q));};
+function toggleSub(s){S.excluded.has(s)?S.excluded.delete(s):S.excluded.add(s);S.generated=false;recomp();renderAll();}
+function setAll(on){S.excluded=on?new Set():new Set(S.subjects);S.generated=false;recomp();renderAll();}
+function chgIdCol(i){S.idColIdx=i;if(!S.rawBody)return;const{subjects:subs,students}=parseBody(S.rawBody,S.headers,i);S.subjects=subs;S.rows=students;S.excluded=new Set();S.selSub=subs[0]||null;S.generated=false;recomp();renderAll();}
+function reset(){S.fileName='';S.headers=[];S.rawBody=null;S.subjects=[];S.rows=null;S.excluded=new Set();S.generated=false;S.ids=['',''];S.tabsCount=1;S.activeTab=0;showErr('');document.getElementById('fi').value='';renderAll();}
+
+function showErr(m){document.getElementById('errbox').innerHTML=m?`<div class="errbox" style="margin-top:16px;">⚠ ${esc(m)}</div>`:''}
+
+function renderAll(){rHdr();rUpload();rFilter();rIds();rGenBtn();rResults();}
+
+function rHdr(){const el=document.getElementById('hmeta');if(!S.rows){el.textContent='';return;}const inc=S.subjects.length-S.excluded.size;el.innerHTML=`${S.rows.length} étudiants &nbsp;&middot;&nbsp; ${inc}/${S.subjects.length} épreuves`;}
+
+function rUpload(){
+  const ld=!!S.rows;
+  document.getElementById('upload-zone').hidden=ld;
+  document.getElementById('file-loaded').hidden=!ld;
+  if(!ld)return;
+  const tg=S.subjects.reduce((s,sub)=>s+(S.subStats[sub]?.n||0),0);
+  document.getElementById('fname').textContent=S.fileName;
+  document.getElementById('fsub').textContent=`${fi(S.rows.length)} étudiants · ${fi(S.subjects.length)} épreuves · ${fi(tg)} notes · éch. /${S.scaleMax}`;
+  const sel=document.getElementById('idcolsel');sel.innerHTML='';
+  S.headers.forEach((h,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`Col. ${i+1} — ${h||'(sans nom)'}`;if(i===S.idColIdx)o.selected=true;sel.appendChild(o);});
+  document.querySelectorAll('#scaleseg button').forEach(b=>b.classList.toggle('on',Number(b.dataset.v)===S.scaleMax));
+  const tb=document.getElementById('vtbody');tb.innerHTML='';
+  S.subjects.forEach(s=>{const st=S.subStats[s];const ab=S.rows.length-(st?.n||0);const tr=document.createElement('tr');tr.innerHTML=`<td>${esc(s)}</td><td>${st?fi(st.n):'—'}</td><td>${st?fm(st.min):'—'}</td><td>${st?fm(st.max):'—'}</td><td>${st?fm(st.mean):'—'}</td><td style="color:${ab>0?'var(--a1)':'var(--muted)'}">${fi(ab)}</td>`;tb.appendChild(tr);});
+}
+
+function rFilter(){
+  document.getElementById('sec-filter').hidden=!S.rows;
+  if(!S.rows)return;
+  const tot=S.subjects.length,inc=tot-S.excluded.size;
+  document.getElementById('inccount').textContent=inc;
+  document.getElementById('totcount').textContent=tot;
+  const chips=document.getElementById('schips');chips.innerHTML='';
+  S.subjects.forEach(s=>{const b=document.createElement('button');b.className='schip'+(S.excluded.has(s)?' ex':'');b.textContent=s;b.onclick=()=>toggleSub(s);chips.appendChild(b);});
+}
+
+function rIds(){
+  document.getElementById('sec-ids').hidden=!S.rows;if(!S.rows)return;
+  document.querySelectorAll('#idtabs .tab').forEach((t,i)=>{t.hidden=(i===1&&S.tabsCount===1);t.classList.toggle('on',i===S.activeTab);const sfx=S.ids[i]?` · ${S.ids[i].slice(0,6)}${S.ids[i].length>6?'…':''}`:'' ;t.textContent=`Étudiant ${i===0?'A':'B'}${sfx}`;});
+  document.getElementById('btnaddtab').hidden=S.tabsCount===2;
+  document.getElementById('btnrmtab').hidden=S.tabsCount===1;
+  const card=document.getElementById('idcard');card.className=`idcard ${S.activeTab===0?'a':'b'}`;
+  document.getElementById('idlabel').textContent=`Identifiant de l'étudiant ${S.activeTab===0?'A':'B'}`;
+  document.getElementById('idinput').value=S.ids[S.activeTab];
+}
+
+function rGenBtn(){
+  document.getElementById('sec-gen').hidden=!S.rows;if(!S.rows)return;
+  const incCnt=S.subjects.length-S.excluded.size;
+  const ok=!!S.rows&&S.ids[0].trim()!==''&&(S.tabsCount===1||S.ids[1].trim()!=='')&&incCnt>0;
+  document.getElementById('btngen').disabled=!ok;
+  const h=document.getElementById('genhint');
+  if(!S.rows)h.textContent='';
+  else if(incCnt===0)h.textContent="Inclus au moins une matière dans l'analyse.";
+  else if(!ok)h.textContent=`Saisis ${S.tabsCount===2?'les deux identifiants':'un identifiant'} pour continuer.`;
+  else h.textContent='';
+}
+
+function badge(p){
+  if(p==null||isNaN(p))return'';
+  if(p>=90)return'<span class="badge bg-top">Top 10 %</span>';
+  if(p>=75)return'<span class="badge bg-up">Top 25 %</span>';
+  if(p>=50)return'<span class="badge bg-mid">Au-dessus médiane</span>';
+  return'<span class="badge bg-low">Sous la médiane</span>';
+}
+
+function buildHeroRow(stu){
+  const inc=S.overall.inc;const gs=inc.map(s=>stu.grades[s]).filter(v=>v!=null);
+  const moy=gs.length?avg(gs):null;const os=S.overall.stats?.sorted||[];
+  return{moy,n:gs.length,rank:moy!=null?RK(moy,os):null,pct:moy!=null?PC(moy,os):null};
+}
+
+function buildRadar(stu,colorVar){
+  const inc=S.overall.inc.slice(0,Math.min(S.overall.inc.length,12));
+  const N=inc.length;if(N<3)return null;
+  const size=160;const cx=size/2,cy=size/2,R=size/2-24;
+  const ns='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox',`0 0 ${size} ${size}`);svg.setAttribute('role','img');svg.setAttribute('aria-label','Radar de performance');
+  for(let ring=1;ring<=4;ring++){
+    const pts=[];for(let i=0;i<N;i++){const a=2*Math.PI*i/N-Math.PI/2;const r=R*ring/4;pts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`);}
+    const poly=document.createElementNS(ns,'polygon');poly.setAttribute('points',pts.join(' '));poly.setAttribute('fill','none');poly.setAttribute('stroke',ring===4?'var(--line)':'var(--linef)');poly.setAttribute('stroke-width','1');svg.appendChild(poly);
+  }
+  for(let i=0;i<N;i++){const a=2*Math.PI*i/N-Math.PI/2;const line=document.createElementNS(ns,'line');line.setAttribute('x1',cx);line.setAttribute('y1',cy);line.setAttribute('x2',cx+R*Math.cos(a));line.setAttribute('y2',cy+R*Math.sin(a));line.setAttribute('stroke','var(--linef)');line.setAttribute('stroke-width','1');svg.appendChild(line);}
+  const medPts=[];for(let i=0;i<N;i++){const s=inc[i];const st=S.subStats[s];if(!st)continue;const med=st.median/S.scaleMax;const a=2*Math.PI*i/N-Math.PI/2;const r=R*Math.min(1,Math.max(0,med));medPts.push(`${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`);}
+  if(medPts.length>=3){const mpoly=document.createElementNS(ns,'polygon');mpoly.setAttribute('points',medPts.join(' '));mpoly.setAttribute('fill','rgba(122,112,96,.12)');mpoly.setAttribute('stroke','var(--muted)');mpoly.setAttribute('stroke-width','1');mpoly.setAttribute('stroke-dasharray','3 2');svg.appendChild(mpoly);}
+  const stuPts=[];for(let i=0;i<N;i++){const s=inc[i];const g=stu.grades[s];if(g==null)continue;const norm=g/S.scaleMax;const a=2*Math.PI*i/N-Math.PI/2;const r=R*Math.min(1,Math.max(0,norm));stuPts.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});}
+  if(stuPts.length>=3){
+    const pts=stuPts.map(p=>`${p.x},${p.y}`).join(' ');
+    const fill=document.createElementNS(ns,'polygon');fill.setAttribute('points',pts);fill.setAttribute('fill',`color-mix(in srgb,${colorVar} 18%,transparent)`);fill.setAttribute('stroke',colorVar);fill.setAttribute('stroke-width','1.5');svg.appendChild(fill);
+    stuPts.forEach(p=>{const c=document.createElementNS(ns,'circle');c.setAttribute('cx',p.x);c.setAttribute('cy',p.y);c.setAttribute('r','2.5');c.setAttribute('fill',colorVar);svg.appendChild(c);});
+  }
+  for(let i=0;i<N;i++){const a=2*Math.PI*i/N-Math.PI/2;const lr=R+14;const tx=cx+lr*Math.cos(a);const ty=cy+lr*Math.sin(a);const label=inc[i].length>8?inc[i].slice(0,7)+'…':inc[i];const t=document.createElementNS(ns,'text');t.setAttribute('x',tx);t.setAttribute('y',ty);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','middle');t.setAttribute('font-size','8');t.setAttribute('font-family','IBM Plex Mono, monospace');t.setAttribute('fill','var(--muted)');t.textContent=label;svg.appendChild(t);}
+  return svg;
+}
+
+function rResults(){
+  const show=!!S.generated&&!!S.rows;
+  document.getElementById('sec-results').hidden=!show;
+  if(!show)return;
+  const d=S.reportDate||new Date();
+  document.getElementById('rdate').textContent=d.toLocaleDateString('fr-FR',{year:'numeric',month:'long',day:'numeric'}).toUpperCase();
+  const inc=S.overall?.inc.length||0;
+  document.getElementById('rtitle').innerHTML=`Rapport <em>—</em> ${inc}/${S.subjects.length} épreuves incluses`;
+  const eb=document.getElementById('reserr');let errs='';
+  if(S.ids[0].trim()&&!S.stu1)errs+=`<div class="errbox">⚠ Identifiant « ${esc(S.ids[0])} » introuvable (étudiant A).</div>`;
+  if(S.tabsCount===2&&S.ids[1].trim()&&!S.stu2)errs+=`<div class="errbox" style="margin-top:8px;">⚠ Identifiant « ${esc(S.ids[1])} » introuvable (étudiant B).</div>`;
+  eb.innerHTML=errs;
+  const hero=document.getElementById('block-hero');hero.innerHTML='';
+  hero.className='herogrid'+((S.stu1&&S.stu2)?' two':'');
+  if(S.stu1)hero.appendChild(buildHeroCard('A','a','var(--a1)',S.stu1));
+  if(S.stu2)hero.appendChild(buildHeroCard('B','b','var(--a2)',S.stu2));
+  document.getElementById('block-profile').hidden=!S.stu1&&!S.stu2;
+  if(S.stu1||S.stu2)rProfile();
+  rSubStats();rDist();
+}
+
+function buildHeroCard(lbl,cls,colorVar,stu){
+  const r=buildHeroRow(stu);const oN=S.overall.stats?.n||0;
+  const pw=r.pct!=null?Math.max(0,Math.min(100,r.pct)):0;
+  const el=document.createElement('div');el.className=`herocard ${cls}`;
+  el.innerHTML=`
+    <div class="hchd"><div class="hclabel mono">Étudiant ${lbl}</div><div class="hcid mono">${esc(stu.id)}</div></div>
+    <div class="hcbody">
+      <div class="hckpis">
+        <div class="hcmain">
+          <div>
+            <div class="kval ff">${r.moy!=null?fm(r.moy):'—'}</div>
+            <div class="klabel mono">Moyenne générale</div>
+            <div class="ksub mono">${r.n} / ${S.overall.inc.length} épreuves</div>
+          </div>
+          <div class="kright">
+            <div class="kval ff">${r.rank!=null?fi(r.rank):'—'}<span style="font-size:.38em;color:var(--muted)"> /&nbsp;${fi(oN)}</span></div>
+            <div class="klabel mono">Rang global</div>
+            <div>${r.pct!=null?badge(r.pct):''}</div>
+          </div>
+        </div>
+        <div class="pctbar">
+          <div class="ptrow">
+            <span>Position dans la promotion</span>
+            <span class="ptval">${r.pct!=null?fp(r.pct):'—'}</span>
+          </div>
+          <div class="ptrack">
+            <div class="pfill" style="width:${pw}%"></div>
+            ${r.pct!=null?`<div class="pmark" style="left:${pw}%"></div>`:''}
+          </div>
+        </div>
+      </div>
+      <div class="radar-wrap" id="radar-${cls}"></div>
+    </div>`;
+  setTimeout(()=>{
+    const wrap=el.querySelector(`#radar-${cls}`);if(!wrap)return;
+    const svg=buildRadar(stu,colorVar);if(svg)wrap.appendChild(svg);
+    else wrap.style.display='none';
+  },0);
+  return el;
+}
+
+function rProfile(){
+  const thead=document.getElementById('pthead');
+  let h='<tr><th style="text-align:left">Épreuve</th>';
+  if(S.stu1)h+='<th style="color:var(--a1)">A &middot; note</th><th style="color:var(--a1)">A &middot; rang</th><th style="color:var(--a1)">A &middot; pct.</th>';
+  if(S.stu2)h+='<th style="color:var(--a2)">B &middot; note</th><th style="color:var(--a2)">B &middot; rang</th><th style="color:var(--a2)">B &middot; pct.</th>';
+  h+='<th>médiane</th><th>n</th></tr>';thead.innerHTML=h;
+  const tbody=document.getElementById('ptbody');tbody.innerHTML='';
+  S.subjects.forEach(s=>{
+    const ex=S.excluded.has(s);const st=S.subStats[s];
+    const g1=S.stu1?.grades[s],g2=S.stu2?.grades[s];const sr=st?.sorted||[];
+    let row=`<tr class="${ex?'excl':''}"><td>${esc(s)}${ex?'<span class="etag">exclue</span>':''}</td>`;
+    if(S.stu1){const r1=(g1!=null&&st)?RK(g1,sr):null,p1=(g1!=null&&st)?PC(g1,sr):null;
+      row+=`<td class="${g1==null?'cm':'ca'}">${g1==null?'—':fm(g1)}</td><td>${r1?`${fi(r1)}/${fi(st.n)}`:'—'}</td>`;
+      row+=p1!=null?`<td class="pcc" style="--pcw:${Math.max(0,Math.min(100,p1))}%;--pcc:var(--a1s)">${fp(p1)}</td>`:'<td>—</td>';}
+    if(S.stu2){const r2=(g2!=null&&st)?RK(g2,sr):null,p2=(g2!=null&&st)?PC(g2,sr):null;
+      row+=`<td class="${g2==null?'cm':'cb'}">${g2==null?'—':fm(g2)}</td><td>${r2?`${fi(r2)}/${fi(st.n)}`:'—'}</td>`;
+      row+=p2!=null?`<td class="pcc" style="--pcw:${Math.max(0,Math.min(100,p2))}%;--pcc:var(--a2s)">${fp(p2)}</td>`:'<td>—</td>';}
+    row+=`<td class="cm">${st?fm(st.median):'—'}</td><td class="cm">${st?fi(st.n):'—'}</td></tr>`;
+    tbody.insertAdjacentHTML('beforeend',row);
+  });
+  const oN=S.overall.stats?.n||0;const r1=S.stu1?buildHeroRow(S.stu1):null,r2=S.stu2?buildHeroRow(S.stu2):null;
+  let sum='<tr class="sumrow"><td>Moyenne générale (non pondérée)</td>';
+  if(S.stu1){sum+=`<td style="color:var(--a1)">${r1?.moy!=null?fm(r1.moy):'—'}</td><td style="color:var(--a1)">${r1?.rank?`${fi(r1.rank)}/${fi(oN)}`:'—'}</td><td style="color:var(--a1)">${r1?.pct!=null?fp(r1.pct):'—'}</td>`;}
+  if(S.stu2){sum+=`<td style="color:var(--a2)">${r2?.moy!=null?fm(r2.moy):'—'}</td><td style="color:var(--a2)">${r2?.rank?`${fi(r2.rank)}/${fi(oN)}`:'—'}</td><td style="color:var(--a2)">${r2?.pct!=null?fp(r2.pct):'—'}</td>`;}
+  sum+=`<td class="cm">${S.overall.stats?fm(S.overall.stats.median):'—'}</td><td class="cm">${fi(oN)}</td></tr>`;
+  tbody.insertAdjacentHTML('beforeend',sum);
+}
+
+function rSubStats(){
+  const tb=document.getElementById('stbody');tb.innerHTML='';
+  const KS=['n','mean','stdev','min','p10','q1','median','q3','p90','max'];
+  S.subjects.forEach(s=>{
+    const st=S.subStats[s];const ex=S.excluded.has(s);
+    let row=`<tr class="${ex?'excl':''}"><td>${esc(s)}${ex?'<span class="etag">exclue</span>':''}</td>`;
+    KS.forEach(k=>row+=`<td>${!st?'—':k==='n'?fi(st[k]):fm(st[k])}</td>`);
+    row+='</tr>';tb.insertAdjacentHTML('beforeend',row);
+  });
+  if(S.overall?.stats){
+    let s='<tr class="sumrow"><td>Moyenne générale</td>';
+    KS.forEach(k=>s+=`<td>${k==='n'?fi(S.overall.stats[k]):fm(S.overall.stats[k])}</td>`);
+    s+='</tr>';tb.insertAdjacentHTML('beforeend',s);
+  }
+}
+
+function rDist(){
+  const chips=document.getElementById('dchips');chips.innerHTML='';
+  S.subjects.forEach(s=>{const b=document.createElement('button');b.className='dchip'+(S.selSub===s?' on':'')+(S.excluded.has(s)?' ex':'');b.textContent=s;b.onclick=()=>{S.selSub=s;rDist();};chips.appendChild(b);});
+  const cont=document.getElementById('histcont');cont.innerHTML='';
+  if(S.selSub&&S.subStats[S.selSub])cont.appendChild(buildHist(S.selSub,S.subStats[S.selSub],S.stu1?.grades[S.selSub],S.stu2?.grades[S.selSub]));
+  if(S.overall?.stats){const g1=S.stu1?S.overall.byStu[S.stu1.id]?.mean:null;const g2=S.stu2?S.overall.byStu[S.stu2.id]?.mean:null;cont.appendChild(buildHist('Moyenne générale (non pondérée)',S.overall.stats,g1,g2));}
+}
+
+function buildHist(title,stats,g1,g2){
+  const sm=S.scaleMax;const bc=Math.min(20,Math.max(10,Math.round(sm)));
+  const bins=BINS(stats.sorted,0,sm,bc);const mc=Math.max(...bins.map(b=>b.count),1);
+  const card=document.createElement('div');card.className='hcard';
+  card.innerHTML=`
+    <div class="hhd"><h3 class="ff">${esc(title)}</h3><div class="hst mono">n = ${fi(stats.n)} · méd. ${fm(stats.median)} · Q1 ${fm(stats.q1)} · Q3 ${fm(stats.q3)} · σ ${fm(stats.stdev)}</div></div>
+    <div class="harea"><div class="hgrid"></div><div class="hchart"></div></div>
+    <div class="haxis"></div><div class="hleg"></div>`;
+  const grid=card.querySelector('.hgrid');
+  for(let i=0;i<=4;i++){const gl=document.createElement('div');gl.className='hgl';const sp=document.createElement('span');sp.textContent=Math.round(mc*(4-i)/4);gl.appendChild(sp);grid.appendChild(gl);}
+  const chart=card.querySelector('.hchart');
+  bins.forEach(b=>{const bar=document.createElement('div');bar.className='hbar';bar.style.height=(b.count/mc*100)+'%';const c1=g1!=null&&g1>=b.x0&&g1<=b.x1,c2=g2!=null&&g2>=b.x0&&g2<=b.x1;if(c1&&c2)bar.classList.add('both');else if(c1)bar.classList.add('a1');else if(c2)bar.classList.add('a2');bar.title=`[${fm(b.x0,1)} – ${fm(b.x1,1)}[ — ${b.count} étudiant${b.count>1?'s':''}`;chart.appendChild(bar);});
+  const addL=(v,cls)=>{const l=document.createElement('div');l.className='hline '+cls;l.style.left=(v/sm*100)+'%';chart.appendChild(l);};
+  addL(stats.q1,'q');addL(stats.q3,'q');addL(stats.median,'median');
+  if(g1!=null)addL(g1,'s1');if(g2!=null)addL(g2,'s2');
+  const ax=card.querySelector('.haxis');for(let i=0;i<=10;i++){const sp=document.createElement('span');sp.textContent=String(Math.round(i*sm/10));ax.appendChild(sp);}
+  const leg=card.querySelector('.hleg');
+  leg.innerHTML=`<div class="li" style="color:var(--ink)"><span class="ls d"></span>médiane</div><div class="li" style="color:var(--muted)"><span class="ls d"></span>Q1 · Q3</div>`;
+  if(g1!=null)leg.innerHTML+=`<div class="li" style="color:var(--a1)"><span class="ls s"></span>A : ${fm(g1)} · rang ${fi(RK(g1,stats.sorted))}/${fi(stats.n)} · ${fp(PC(g1,stats.sorted))}</div>`;
+  if(g2!=null)leg.innerHTML+=`<div class="li" style="color:var(--a2)"><span class="ls s"></span>B : ${fm(g2)} · rang ${fi(RK(g2,stats.sorted))}/${fi(stats.n)} · ${fp(PC(g2,stats.sorted))}</div>`;
+  return card;
+}
+
+document.getElementById('fi').addEventListener('change',e=>handleFile(e.target.files?.[0]));
+document.getElementById('btnreload').addEventListener('click',reset);
+document.getElementById('idcolsel').addEventListener('change',e=>chgIdCol(Number(e.target.value)));
+document.querySelectorAll('#scaleseg button').forEach(b=>b.addEventListener('click',()=>{S.scaleMax=Number(b.dataset.v);S.generated=false;renderAll();}));
+document.getElementById('btnallin').addEventListener('click',()=>setAll(true));
+document.getElementById('btnallout').addEventListener('click',()=>setAll(false));
+document.querySelectorAll('#idtabs .tab').forEach(t=>t.addEventListener('click',()=>{S.activeTab=Number(t.dataset.tab);S.generated=false;rIds();rResults();}));
+document.getElementById('btnaddtab').addEventListener('click',()=>{S.tabsCount=2;S.activeTab=1;S.generated=false;rIds();rGenBtn();rResults();});
+document.getElementById('btnrmtab').addEventListener('click',()=>{S.tabsCount=1;S.activeTab=0;S.ids[1]='';S.generated=false;rIds();rGenBtn();rResults();});
+document.getElementById('idinput').addEventListener('input',e=>{
+  S.ids[S.activeTab]=e.target.value;S.generated=false;
+  const tabs=document.querySelectorAll('#idtabs .tab');const i=S.activeTab;
+  const sfx=S.ids[i]?` · ${S.ids[i].slice(0,6)}${S.ids[i].length>6?'…':''}`:'' ;
+  tabs[i].textContent=`Étudiant ${i===0?'A':'B'}${sfx}`;
+  rGenBtn();document.getElementById('sec-results').hidden=true;
+});
+document.getElementById('btngen').addEventListener('click',()=>{
+  S.stu1=findStu(S.ids[0]);S.stu2=S.tabsCount===2?findStu(S.ids[1]):null;
+  S.generated=true;S.reportDate=new Date();rResults();
+  setTimeout(()=>document.getElementById('sec-results').scrollIntoView({behavior:'smooth',block:'start'}),80);
+});
+
+async function exportPDF(){
+  const btn=document.getElementById('pdfbtn');
+  const icon=document.getElementById('pdf-icon');
+  const lbl=document.getElementById('pdf-label');
+  btn.disabled=true;icon.style.display='none';
+  lbl.insertAdjacentHTML('beforebegin','<div class="spinner"></div>');
+  lbl.textContent='Génération…';
+  const el=document.getElementById('sec-results');
+  btn.style.visibility='hidden';
+  try{
+    const canvas=await html2canvas(el,{scale:2,useCORS:true,allowTaint:true,backgroundColor:'#F5F0E8',logging:false,windowWidth:el.scrollWidth});
+    btn.style.visibility='visible';
+    const{jsPDF}=window.jspdf;
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const pageW=pdf.internal.pageSize.getWidth(),pageH=pdf.internal.pageSize.getHeight();
+    const margin=10,contentW=pageW-2*margin,contentH=pageH-2*margin;
+    const imgW=canvas.width,imgH=canvas.height;
+    const pxToMm=25.4/96/2;
+    const sf=contentW/(imgW*pxToMm);
+    const pxPerPage=Math.round(contentH/sf/pxToMm);
+    const totalPages=Math.ceil(imgH/pxPerPage);
+    for(let p=0;p<totalPages;p++){
+      if(p>0)pdf.addPage();
+      const srcY=p*pxPerPage,srcH=Math.min(pxPerPage,imgH-srcY);
+      const slice=document.createElement('canvas');slice.width=imgW;slice.height=pxPerPage;
+      const ctx=slice.getContext('2d');ctx.fillStyle='#F5F0E8';ctx.fillRect(0,0,imgW,pxPerPage);
+      ctx.drawImage(canvas,0,srcY,imgW,srcH,0,0,imgW,srcH);
+      pdf.addImage(slice.toDataURL('image/jpeg',0.92),'JPEG',margin,margin,contentW,contentH);
+    }
+    pdf.save(`analyse-partiels-${new Date().toLocaleDateString('fr-FR').replace(/\//g,'-')}.pdf`);
+  }catch(e){
+    btn.style.visibility='visible';
+    alert('Erreur PDF : '+e.message);
+  }finally{
+    btn.disabled=false;const sp=btn.querySelector('.spinner');if(sp)sp.remove();
+    icon.style.display='';lbl.textContent='Exporter PDF';
+  }
+}
+
+renderAll();
+</script>
+</body>
+</html>

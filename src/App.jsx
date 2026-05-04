@@ -1217,6 +1217,44 @@ Contraintes :
         </div>
       </header>
 
+      {/* Barre de menu — bascule entre les 3 outils */}
+      <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec' }}>
+        <div className="max-w-7xl mx-auto px-6 flex items-center gap-0 overflow-x-auto">
+          {[
+            { key: 'qcm', label: 'QCM / QROC', match: m => m !== 'ecos' && m !== 'analyse' },
+            { key: 'ecos', label: 'ECOS', match: m => m === 'ecos' },
+            { key: 'analyse', label: 'Analyse partiels', match: m => m === 'analyse' },
+          ].map(t => {
+            const active = t.match(mode);
+            return (
+              <button
+                key={t.key}
+                onClick={() => {
+                  if (t.key === 'qcm') {
+                    if (mode === 'ecos' || mode === 'analyse') reset();
+                  } else if (t.key === 'ecos') {
+                    if (mode !== 'ecos') setMode('ecos');
+                  } else if (t.key === 'analyse') {
+                    if (mode !== 'analyse') setMode('analyse');
+                  }
+                }}
+                className="px-4 py-3 text-sm whitespace-nowrap"
+                style={{
+                  background: 'transparent',
+                  color: active ? '#1a1a1a' : '#5a5a5a',
+                  fontWeight: active ? 600 : 400,
+                  borderBottom: `2px solid ${active ? '#b54125' : 'transparent'}`,
+                  marginBottom: '-1px',
+                  transition: 'all .15s',
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
       {showAuth && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowAuth(false)}>
@@ -1302,7 +1340,7 @@ Contraintes :
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' ? 'none' : '' }}>
 
         {mode === 'home' && (
           <>
@@ -2075,10 +2113,26 @@ Contraintes :
         )}
       </main>
 
-      <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
-        Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
-        Les PDF ne quittent jamais ta machine.
-      </footer>
+      {mode === 'analyse' && (
+        <iframe
+          src="/analyse-partiels.html"
+          title="Analyse des partiels"
+          style={{
+            width: '100%',
+            height: 'calc(100vh - 130px)',
+            border: 'none',
+            background: '#F5F0E8',
+            display: 'block',
+          }}
+        />
+      )}
+
+      {mode !== 'analyse' && (
+        <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
+          Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
+          Les PDF ne quittent jamais ta machine.
+        </footer>
+      )}
     </div>
   );
 }
