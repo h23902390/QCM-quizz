@@ -4235,7 +4235,7 @@ Contraintes :
             width: '100%',
             height: 'calc(100vh - 130px)',
             border: 'none',
-            background: '#F5F0E8',
+            background: '#f6f3ec',
             display: 'block',
           }}
         />
