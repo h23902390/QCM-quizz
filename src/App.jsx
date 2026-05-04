@@ -378,6 +378,41 @@ export default function App() {
           setEntTranscript(finalTxt);
         }
       }
+      // Étape d'étiquetage Médecin / Patient via GPT
+      setEntProgress({ current: 0, total: 0 });
+      setEntStep('labelling');
+      try {
+        const labelSys = `Tu reçois la transcription brute (sans étiquettes) d'un entretien médical entre un étudiant en médecine (ÉTUDIANT) et un patient (PATIENT). Ta tâche : restituer le dialogue ligne par ligne en attribuant chaque réplique au bon locuteur. Règles :
+- Format strict, une réplique par ligne, préfixée par "Médecin :" ou "Patient :".
+- L'étudiant pose les questions et oriente l'entretien (motif, ATCD, examen). Le patient décrit ses symptômes, son histoire, ses ressentis.
+- Ne reformule PAS le contenu : reprends les mots de la transcription, corrige uniquement les fautes de transcription évidentes et la ponctuation.
+- N'invente AUCUNE réplique. Si un passage est ambigu, fais le choix le plus probable.
+- Pas de commentaire, pas d'introduction. Uniquement le dialogue annoté.`;
+        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: labelSys },
+              { role: 'user', content: `Transcription brute :\n\n${finalTxt}` },
+            ],
+            temperature: 0.2,
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const labelled = (data.choices?.[0]?.message?.content || '').trim();
+          if (labelled) {
+            finalTxt = labelled;
+            setEntTranscript(labelled);
+          }
+        } else {
+          console.warn('Étiquetage échoué', await resp.text());
+        }
+      } catch (e) {
+        console.warn('Étiquetage échoué', e);
+      }
       setEntStep('transcribed');
       if (entRecordId) {
         try { await updateEntretien(entRecordId, { transcript: finalTxt }); } catch (e) { console.warn(e); }
@@ -2687,6 +2722,11 @@ Contraintes :
                 <div className="text-sm" style={{ color: '#5a5a5a' }}>
                   Transcription en cours…
                   {entProgress.total > 1 && ` (segment ${entProgress.current}/${entProgress.total})`}
+                </div>
+              )}
+              {entStep === 'labelling' && (
+                <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                  Étiquetage Médecin / Patient…
                 </div>
               )}
 
