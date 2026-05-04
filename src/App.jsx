@@ -92,7 +92,8 @@ const classifyPixel = (r, g, b) => {
 const cleanMarkdownNoise = (s = '') => s
   .replace(/^#{1,6}\s*/gm, '')
   .replace(/^\s*[-*]\s+/gm, '• ')
-  .replace(/`{1,3}/g, '');
+  .replace(/`{1,3}/g, '')
+  .replace(/\*\*/g, '');
 
 // ---------- Component ----------
 export default function App() {
@@ -177,7 +178,6 @@ export default function App() {
   const [ecosBuiltInConverting, setEcosBuiltInConverting] = useState(false);
   const [ecosBuiltInProgress, setEcosBuiltInProgress] = useState({ current: 0, total: 0 });
   const [ecosAttempts, setEcosAttempts] = useState([]);
-  const [ecosPendingAttempt, setEcosPendingAttempt] = useState(null);
   const [ecosCategory, setEcosCategory] = useState('all');
   const ecosImportInputRef = useRef(null);
 
@@ -602,7 +602,7 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
       const body = {
         model,
         messages: [
-          { role: 'system', content: ecosCase.briefPatient },
+          { role: 'system', content: `${ecosCase.briefPatient}\n\nRÈGLES IMPORTANTES:\n- Réponds uniquement à la question posée par le candidat.\n- Sois précise et non évasive sur les symptômes/antécédents quand on te les demande.\n- N'ajoute pas spontanément des informations qui n'ont pas été demandées.` },
           ...newMessages,
         ],
         temperature: 0.2,
@@ -705,9 +705,11 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
 Règles impératives:
 1) Évalue TOUS les items de la grille, dans le même ordre.
 2) pointsObtenus est borné entre 0 et pointsMax.
-3) Si un critère n'est pas explicitement présent dans le transcript, mettre 0.
+3) Si un critère n'est pas explicitement exploré par le candidat (question/verification active), mettre 0.
 4) Pas d'invention: aucune information absente du transcript.
 5) Commentaires courts, factuels, citant le comportement observé.
+6) Sois sévère: une mention vague sans précision clinique = 0 ou score minimal.
+7) N'accorde aucun point sur une simple salutation, reformulation, ou hypothèse non argumentée.
 Réponds STRICTEMENT en JSON valide:
 {"items":[{"section":"...","critere":"...","pointsMax":n,"pointsObtenus":n,"commentaire":"..."}],"feedbackGlobal":"...","pointsForts":["..."],"axesAmelioration":["..."]}.
 Total /${totalPoints}, ensuite cohérent avec une note /20.`,
@@ -734,7 +736,7 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
       const parsed = JSON.parse(raw);
       setEcosEvaluation(parsed);
       if (session) {
-        setEcosPendingAttempt({
+        const attemptPayload = {
           case_id: ecosCase.id,
           data: {
             caseId: ecosCase.id,
@@ -744,9 +746,9 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
             durationSec: ecosStartedAt ? Math.max(0, Math.round((Date.now() - ecosStartedAt) / 1000)) : null,
             evaluation: parsed,
           },
-        });
-      } else {
-        setEcosPendingAttempt(null);
+        };
+        upsertEcosAttempt(attemptPayload).catch(e => console.warn('upsertEcosAttempt', e));
+        setEcosAttempts(prev => [attemptPayload, ...prev.filter(a => a.case_id !== attemptPayload.case_id)]);
       }
       setMode('ecos-results');
     } catch (e) {
@@ -2190,12 +2192,6 @@ Contraintes :
                 className="btn-secondary px-3 py-1.5 text-xs">
                 {ecosImportOpen ? 'Fermer l\'import' : '+ Importer un ECOS (PDF)'}
               </button>
-              <button onClick={convertBuiltInEcos} disabled={ecosBuiltInConverting || !apiKey}
-                className="btn-secondary px-3 py-1.5 text-xs">
-                {ecosBuiltInConverting
-                  ? `Conversion ${ecosBuiltInProgress.current}/${ecosBuiltInProgress.total}…`
-                  : `Convertir les ${ECOS_BUILTIN_RAW.length} ECOS intégrés (Fac)`}
-              </button>
             </div>
             <div className="mb-4 flex items-center gap-2">
               <label className="mono text-xs" style={{ color: '#5a5a5a' }}>Catégorie</label>
@@ -2241,6 +2237,9 @@ Contraintes :
 
             <div className="grid md:grid-cols-2 gap-4">
               {visibleEcosCases.filter(c => !customCases.find(cc => cc.id === c.id)).map(c => (
+                (() => {
+                  const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
+                  return (
                 <div key={c.id} className="card-hover p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
                   onClick={() => startEcos(c)}>
                   <div className="flex items-baseline justify-between mb-2">
@@ -2251,14 +2250,22 @@ Contraintes :
                   <div className="text-xs" style={{ color: '#5a5a5a' }}>
                     Grille : {c.grilleCorrection.length} items · {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
                   </div>
-                  {ecosAttempts.find(a => a.case_id === c.id)?.data?.finishedAt && (
-                    <div className="mono text-[10px] mt-2" style={{ color: '#8a8a8a' }}>
-                      Dernier passage: {new Date(ecosAttempts.find(a => a.case_id === c.id).data.finishedAt).toLocaleString('fr-FR')}
+                  {lastAttempt?.data?.finishedAt && (
+                    <div className="mt-2">
+                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
+                      <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
+                        Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
+                      </div>
                     </div>
                   )}
                 </div>
+                  );
+                })()
               ))}
               {visibleEcosCases.filter(c => customCases.find(cc => cc.id === c.id)).map(c => (
+                (() => {
+                  const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
+                  return (
                 <div key={c.id} className="card-hover p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div onClick={() => startEcos(c)} className="cursor-pointer">
                     <div className="flex items-baseline justify-between mb-2 gap-2">
@@ -2269,9 +2276,12 @@ Contraintes :
                     <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
                       Grille : {(c.grilleCorrection || []).length} items · {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
                     </div>
-                    {ecosAttempts.find(a => a.case_id === c.id)?.data?.finishedAt && (
-                      <div className="mono text-[10px] mt-2" style={{ color: '#8a8a8a' }}>
-                        Dernier passage: {new Date(ecosAttempts.find(a => a.case_id === c.id).data.finishedAt).toLocaleString('fr-FR')}
+                    {lastAttempt?.data?.finishedAt && (
+                      <div className="mt-2">
+                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
+                        <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
+                          Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2285,6 +2295,8 @@ Contraintes :
                       className="text-xs underline" style={{ color: '#b54125' }}>Supprimer</button>
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           </>
@@ -2439,31 +2451,6 @@ Contraintes :
                   className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
                 <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
               </div>
-              {session && (
-                <div className="flex justify-center gap-2 mt-3">
-                  <button
-                    onClick={async () => {
-                      if (!ecosPendingAttempt) return;
-                      try {
-                        await upsertEcosAttempt(ecosPendingAttempt);
-                        setEcosAttempts(prev => [ecosPendingAttempt, ...prev.filter(a => a.case_id !== ecosPendingAttempt.case_id)]);
-                        setEcosPendingAttempt(null);
-                      } catch (e) {
-                        setEcosError('Erreur sauvegarde ECOS : ' + e.message);
-                      }
-                    }}
-                    disabled={!ecosPendingAttempt}
-                    className="btn-primary px-4 py-2 text-xs"
-                  >
-                    {ecosPendingAttempt ? 'Enregistrer ce passage ECOS' : 'Passage déjà enregistré'}
-                  </button>
-                  {ecosPendingAttempt && (
-                    <button onClick={() => setEcosPendingAttempt(null)} className="btn-secondary px-4 py-2 text-xs">
-                      Ne pas enregistrer
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
 
             <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Score par section</h3>
