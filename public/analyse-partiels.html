@@ -856,6 +856,7 @@ renderAll();
 (async function initCloud(){
   const params=new URLSearchParams(location.search);
   const su=params.get('su'),sk=params.get('sk');
+  const at=params.get('at'),rt=params.get('rt');
   const sec=document.getElementById('sec-cloud');
   if(!su||!sk)return; // Supabase non configuré
   let sb;
@@ -863,6 +864,9 @@ renderAll();
     const mod=await import('https://esm.sh/@supabase/supabase-js@2');
     sb=mod.createClient(su,sk,{auth:{persistSession:true,storageKey:'sb-'+new URL(su).host.split('.')[0]+'-auth-token'}});
   }catch(e){console.warn('Supabase load failed',e);return;}
+  if(at&&rt){
+    try{ await sb.auth.setSession({ access_token: at, refresh_token: rt }); }catch(e){ console.warn('setSession failed', e); }
+  }
   const{data:{session}}=await sb.auth.getSession();
   if(!session){
     sec.hidden=false;
