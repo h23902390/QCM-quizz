@@ -17,6 +17,42 @@ import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
 //  - Évaluation IA (OpenAI) pour les QROC
 // ============================================================
 
+// ---------- Confetti (discret, pour les quiz parfaits) ----------
+const Confetti = ({ count = 36 }) => {
+  const pieces = useMemo(() => {
+    const colors = ['#b54125', '#c4a84d', '#6b9d4d', '#1a1a1a', '#7a4fb5'];
+    return Array.from({ length: count }).map((_, i) => ({
+      key: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 350,
+      duration: 1800 + Math.random() * 1400,
+      color: colors[i % colors.length],
+      rot: Math.random() * 360,
+      width: 6 + Math.random() * 6,
+      height: 10 + Math.random() * 10,
+    }));
+  }, [count]);
+  return (
+    <div aria-hidden="true" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', overflow: 'hidden', zIndex: 60 }}>
+      {pieces.map(p => (
+        <span
+          key={p.key}
+          className="confetti-piece"
+          style={{
+            left: `${p.left}%`,
+            background: p.color,
+            width: p.width,
+            height: p.height,
+            transform: `rotate(${p.rot}deg)`,
+            animationDelay: `${p.delay}ms`,
+            animationDuration: `${p.duration}ms`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 // ---------- Helpers ----------
 const normalize = (s) =>
   s.toLowerCase()
@@ -1667,32 +1703,192 @@ Contraintes :
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap');
+
+        /* ---------- Motion tokens ---------- */
+        :root {
+          --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+          --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+          --ease-out-expo:  cubic-bezier(0.16, 1, 0.3, 1);
+          --d-fast: 150ms;
+          --d-base: 220ms;
+          --d-slow: 380ms;
+        }
+
         .display { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; letter-spacing: -0.02em; }
         .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
         .scrollbar::-webkit-scrollbar { width: 8px; }
-        .scrollbar::-webkit-scrollbar-thumb { background: #d6d0c1; border-radius: 4px; }
+        .scrollbar::-webkit-scrollbar-thumb { background: #d6d0c1; border-radius: 4px; transition: background var(--d-fast) var(--ease-out-quart); }
         .scrollbar::-webkit-scrollbar-thumb:hover { background: #b8b09c; }
-        .btn-primary { background: #1a1a1a; color: #f6f3ec; transition: all .15s; }
-        .btn-primary:hover:not(:disabled) { background: #b54125; }
+
+        /* ---------- Buttons ---------- */
+        .btn-primary {
+          background: #1a1a1a; color: #f6f3ec;
+          transition: background var(--d-fast) var(--ease-out-quart),
+                      transform var(--d-fast) var(--ease-out-quart),
+                      box-shadow var(--d-fast) var(--ease-out-quart),
+                      opacity var(--d-fast) var(--ease-out-quart);
+        }
+        .btn-primary:hover:not(:disabled) { background: #b54125; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(181,65,37,0.18); }
+        .btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
         .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-        .btn-secondary { background: transparent; color: #1a1a1a; border: 1px solid #1a1a1a; transition: all .15s; }
-        .btn-secondary:hover:not(:disabled) { background: #1a1a1a; color: #f6f3ec; }
+
+        .btn-secondary {
+          background: transparent; color: #1a1a1a; border: 1px solid #1a1a1a;
+          transition: background var(--d-fast) var(--ease-out-quart),
+                      color var(--d-fast) var(--ease-out-quart),
+                      transform var(--d-fast) var(--ease-out-quart),
+                      opacity var(--d-fast) var(--ease-out-quart);
+        }
+        .btn-secondary:hover:not(:disabled) { background: #1a1a1a; color: #f6f3ec; transform: translateY(-1px); }
+        .btn-secondary:active:not(:disabled) { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
         .btn-secondary:disabled { opacity: .4; cursor: not-allowed; }
+
         .input-field {
           background: #fff; border: 1px solid #d6d0c1; padding: 10px 14px;
-          border-radius: 2px; outline: none; transition: border-color .15s;
+          border-radius: 2px; outline: none;
+          transition: border-color var(--d-fast) var(--ease-out-quart),
+                      box-shadow var(--d-fast) var(--ease-out-quart);
           font-family: inherit; font-size: 14px;
         }
-        .input-field:focus { border-color: #1a1a1a; }
+        .input-field:focus { border-color: #1a1a1a; box-shadow: 0 0 0 3px rgba(26,26,26,0.06); }
+        .input-field:focus.input-accent { border-color: #b54125; box-shadow: 0 0 0 3px rgba(181,65,37,0.12); }
+
+        /* ---------- QCM options ---------- */
         .qcm-option {
           display: flex; gap: 12px; padding: 14px 16px; border: 1px solid #d6d0c1;
-          background: #fff; cursor: pointer; transition: all .12s; align-items: flex-start;
+          background: #fff; cursor: pointer; align-items: flex-start;
+          transition: background var(--d-fast) var(--ease-out-quart),
+                      border-color var(--d-fast) var(--ease-out-quart),
+                      color var(--d-fast) var(--ease-out-quart),
+                      transform var(--d-fast) var(--ease-out-quart);
         }
-        .qcm-option:hover { background: #ece7d8; }
+        .qcm-option:hover { background: #ece7d8; transform: translateX(2px); }
+        .qcm-option:active { transform: translateX(2px) scale(0.995); transition-duration: 80ms; }
         .qcm-option.selected { background: #1a1a1a; color: #f6f3ec; border-color: #1a1a1a; }
-        .qcm-option.correct { background: #e6f3e0; border-color: #6b9d4d; color: #2d5a1a; }
-        .qcm-option.incorrect-selected { background: #f8e0d6; border-color: #b54125; color: #6b1f0a; }
+        .qcm-option.correct { background: #e6f3e0; border-color: #6b9d4d; color: #2d5a1a; animation: optionFlashGreen 600ms var(--ease-out-quart); }
+        .qcm-option.incorrect-selected { background: #f8e0d6; border-color: #b54125; color: #6b1f0a; animation: optionShake 360ms var(--ease-out-quart); }
         .qcm-option.missed { background: #fff8e0; border-color: #c4a84d; color: #5a4a10; }
+
+        /* ---------- Keyframes ---------- */
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.96); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+        @keyframes modalEnter {
+          from { opacity: 0; transform: translateY(8px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes optionShake {
+          0%, 100% { transform: translateX(0); }
+          20%      { transform: translateX(-4px); }
+          40%      { transform: translateX(4px); }
+          60%      { transform: translateX(-2px); }
+          80%      { transform: translateX(2px); }
+        }
+        @keyframes optionFlashGreen {
+          0%   { background: #e6f3e0; }
+          25%  { background: #c6e3b6; }
+          100% { background: #e6f3e0; }
+        }
+        @keyframes timerPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(181,65,37,0); }
+          50%      { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(181,65,37,0.08); }
+        }
+        @keyframes recPulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50%      { transform: scale(1.4); opacity: 0.55; }
+        }
+        @keyframes thinkBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40%           { transform: translateY(-3px); opacity: 1; }
+        }
+        @keyframes scoreReveal {
+          0%   { opacity: 0; transform: translateY(12px) scale(0.92); letter-spacing: -0.04em; }
+          60%  { opacity: 1; transform: translateY(0) scale(1.02); }
+          100% { opacity: 1; transform: translateY(0) scale(1); letter-spacing: -0.02em; }
+        }
+        @keyframes starPop {
+          0%   { transform: scale(1) rotate(0); }
+          40%  { transform: scale(1.4) rotate(15deg); }
+          100% { transform: scale(1) rotate(0); }
+        }
+        @keyframes confettiDrop {
+          0%   { transform: translateY(-20vh) rotate(0); opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+
+        /* ---------- Animation utilities ---------- */
+        .anim-fade-up { animation: fadeUp var(--d-base) var(--ease-out-quart) both; }
+        .anim-fade-in { animation: fadeIn var(--d-base) var(--ease-out-quart) both; }
+        .anim-scale-in { animation: scaleIn var(--d-base) var(--ease-out-quart) both; }
+        .anim-stagger-1 { animation-delay: 60ms; }
+        .anim-stagger-2 { animation-delay: 130ms; }
+        .anim-stagger-3 { animation-delay: 200ms; }
+        .anim-stagger-4 { animation-delay: 280ms; }
+        .anim-stagger-5 { animation-delay: 360ms; }
+
+        .modal-backdrop { animation: fadeIn var(--d-fast) var(--ease-out-quart) both; }
+        .modal-panel { animation: modalEnter var(--d-base) var(--ease-out-expo) both; }
+
+        .chat-bubble { animation: fadeUp var(--d-base) var(--ease-out-quart) both; }
+
+        .score-reveal { animation: scoreReveal 700ms var(--ease-out-expo) both; }
+
+        .timer-pulse { animation: timerPulse 1.6s var(--ease-out-quart) infinite; }
+        .rec-dot { animation: recPulse 1.2s var(--ease-out-quart) infinite; }
+
+        .think-dot { display: inline-block; animation: thinkBounce 1.2s infinite; }
+        .think-dot:nth-child(2) { animation-delay: 0.16s; }
+        .think-dot:nth-child(3) { animation-delay: 0.32s; }
+
+        .star-pop { animation: starPop 380ms var(--ease-out-quart); }
+        .star-btn { transition: transform var(--d-fast) var(--ease-out-quart); }
+        .star-btn:hover { transform: scale(1.18); }
+        .star-btn:active { transform: scale(0.92); transition-duration: 80ms; }
+
+        .nav-tab { position: relative; transition: color var(--d-fast) var(--ease-out-quart); }
+        .nav-tab:hover:not(.nav-tab--active) { color: #1a1a1a; }
+
+        .card-hover { transition: transform var(--d-base) var(--ease-out-quart), box-shadow var(--d-base) var(--ease-out-quart), border-color var(--d-base) var(--ease-out-quart); }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(26,26,26,0.06); }
+
+        .drop-zone { transition: background var(--d-base) var(--ease-out-quart), border-color var(--d-base) var(--ease-out-quart), transform var(--d-base) var(--ease-out-quart); }
+        .drop-zone--over { transform: scale(1.01); }
+
+        .feedback-card { animation: scaleIn var(--d-base) var(--ease-out-quart) both; }
+
+        .progress-bar { transition: width 380ms var(--ease-out-quart); }
+
+        .arrow-slide { display: inline-block; transition: transform var(--d-base) var(--ease-out-quart); }
+        .arrow-host:hover .arrow-slide { transform: translateX(4px); }
+
+        /* Confetti container */
+        .confetti-piece {
+          position: fixed; top: 0; width: 8px; height: 14px;
+          pointer-events: none; z-index: 60;
+          animation: confettiDrop 2.4s var(--ease-out-quart) forwards;
+        }
+
+        /* ---------- Reduced motion ---------- */
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
+          .qcm-option:hover, .btn-primary:hover, .btn-secondary:hover,
+          .card-hover:hover, .star-btn:hover, .arrow-host:hover .arrow-slide,
+          .drop-zone--over { transform: none !important; }
+        }
       `}</style>
 
       <header className="border-b" style={{ borderColor: '#d6d0c1' }}>
@@ -1747,14 +1943,14 @@ Contraintes :
                     if (mode !== 'entretien') setMode('entretien');
                   }
                 }}
-                className="px-4 py-3 text-sm whitespace-nowrap"
+                className={`nav-tab px-4 py-3 text-sm whitespace-nowrap ${active ? 'nav-tab--active' : ''}`}
                 style={{
                   background: 'transparent',
                   color: active ? '#1a1a1a' : '#5a5a5a',
                   fontWeight: active ? 600 : 400,
                   borderBottom: `2px solid ${active ? '#b54125' : 'transparent'}`,
                   marginBottom: '-1px',
-                  transition: 'all .15s',
+                  transition: 'border-color 220ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms cubic-bezier(0.25, 1, 0.5, 1), font-weight 150ms',
                 }}
               >
                 {t.label}
@@ -1765,9 +1961,9 @@ Contraintes :
       </nav>
 
       {showAuth && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26,26,26,0.5)' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowAuth(false)}>
-          <div className="bg-white p-8 max-w-md w-full mx-4" style={{ borderRadius: 4 }} onClick={e => e.stopPropagation()}>
+          <div className="bg-white p-8 max-w-md w-full mx-4 modal-panel" style={{ borderRadius: 4 }} onClick={e => e.stopPropagation()}>
             <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>
               {authIsSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
@@ -1797,9 +1993,9 @@ Contraintes :
       )}
 
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(26,26,26,0.5)' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowSettings(false)}>
-          <div className="bg-white p-8 max-w-lg w-full mx-4" style={{ borderRadius: 4 }} onClick={e => e.stopPropagation()}>
+          <div className="bg-white p-8 max-w-lg w-full mx-4 modal-panel" style={{ borderRadius: 4 }} onClick={e => e.stopPropagation()}>
             <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>Réglages</h2>
             <p className="text-sm mb-6" style={{ color: '#5a5a5a' }}>
               La clé reste stockée localement dans ton navigateur et n'est envoyée qu'à OpenAI.
@@ -1858,7 +2054,7 @@ Contraintes :
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
               onClick={() => fileInputRef.current?.click()}
-              className="cursor-pointer rounded-sm border-2 border-dashed flex flex-col items-center justify-center text-center"
+              className={`drop-zone anim-fade-up cursor-pointer rounded-sm border-2 border-dashed flex flex-col items-center justify-center text-center ${dragOver ? 'drop-zone--over' : ''}`}
               style={{
                 borderColor: dragOver ? '#b54125' : '#b8b09c',
                 background: dragOver ? '#ece7d8' : 'transparent',
@@ -1879,7 +2075,7 @@ Contraintes :
               </div>
               {processing && progress.total > 0 && (
                 <div className="w-full max-w-md mt-6 h-1" style={{ background: '#d6d0c1' }}>
-                  <div className="h-full transition-all" style={{
+                  <div className="h-full progress-bar" style={{
                     background: '#b54125',
                     width: `${(progress.current / progress.total) * 100}%`,
                   }} />
@@ -1901,7 +2097,7 @@ Contraintes :
 
             <div
               onClick={() => setMode('ecos')}
-              className="cursor-pointer mt-6 p-6 border flex items-center justify-between gap-6"
+              className="arrow-host card-hover anim-fade-up anim-stagger-2 cursor-pointer mt-6 p-6 border flex items-center justify-between gap-6"
               style={{ borderColor: '#1a1a1a', background: '#fff' }}
             >
               <div>
@@ -1910,7 +2106,7 @@ Contraintes :
                   Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation détaillée /20.
                 </div>
               </div>
-              <div className="mono text-sm" style={{ color: '#b54125' }}>→</div>
+              <div className="mono text-sm arrow-slide" style={{ color: '#b54125' }}>→</div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 mt-10">
@@ -1919,7 +2115,7 @@ Contraintes :
                 { t: 'Quiz interactif', d: 'Tu réponds, l\'app corrige immédiatement. Score, erreurs, et possibilité de revoir.' },
                 { t: 'Évaluation IA', d: 'Pour les QROC, OpenAI évalue ta réponse même si elle ne matche pas exactement la référence.' },
               ].map((c, i) => (
-                <div key={i} className="p-5 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                <div key={i} className={`card-hover anim-fade-up anim-stagger-${3 + i} p-5 border`} style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div className="display text-lg mb-1" style={{ fontWeight: 600 }}>{c.t}</div>
                   <div className="text-sm" style={{ color: '#5a5a5a' }}>{c.d}</div>
                 </div>
@@ -1995,7 +2191,7 @@ Contraintes :
 
             <div className="grid md:grid-cols-2 gap-4">
               {ECOS_CASES.map(c => (
-                <div key={c.id} className="p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
+                <div key={c.id} className="card-hover p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
                   onClick={() => startEcos(c)}>
                   <div className="flex items-baseline justify-between mb-2">
                     <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
@@ -2008,7 +2204,7 @@ Contraintes :
                 </div>
               ))}
               {customCases.map(c => (
-                <div key={c.id} className="p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+                <div key={c.id} className="card-hover p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                   <div onClick={() => startEcos(c)} className="cursor-pointer">
                     <div className="flex items-baseline justify-between mb-2 gap-2">
                       <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
@@ -2052,7 +2248,7 @@ Contraintes :
                   else if (ecosTimeLeft <= 120) color = '#d97706';
                   return (
                     <div className="flex items-center gap-2">
-                      <div className="mono text-xl px-3 py-1" style={{
+                      <div className={`mono text-xl px-3 py-1 ${ecosTimerRunning && ecosTimeLeft <= 30 ? 'timer-pulse' : ''}`} style={{
                         color, fontWeight: 600,
                         background: '#fff', border: '1px solid #d6d0c1',
                         minWidth: 90, textAlign: 'center',
@@ -2089,7 +2285,7 @@ Contraintes :
                     </div>
                   )}
                   {ecosMessages.map((m, i) => (
-                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={i} className={`flex chat-bubble ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className="max-w-[85%] p-3 text-sm" style={{
                         background: m.role === 'user' ? '#1a1a1a' : '#f6f3ec',
                         color: m.role === 'user' ? '#f6f3ec' : '#1a1a1a',
@@ -2103,9 +2299,12 @@ Contraintes :
                     </div>
                   ))}
                   {ecosSending && (
-                    <div className="flex justify-start">
-                      <div className="p-3 text-sm italic" style={{ background: '#f6f3ec', color: '#8a8a8a', borderRadius: 4 }}>
-                        Le patient réfléchit…
+                    <div className="flex justify-start chat-bubble">
+                      <div className="p-3 text-sm italic flex items-center gap-2" style={{ background: '#f6f3ec', color: '#8a8a8a', borderRadius: 4 }}>
+                        <span>Le patient réfléchit</span>
+                        <span className="think-dot">·</span>
+                        <span className="think-dot">·</span>
+                        <span className="think-dot">·</span>
                       </div>
                     </div>
                   )}
@@ -2152,7 +2351,7 @@ Contraintes :
                   </div>
                   {ecosRecording && (
                     <div className="text-xs mt-2 mono flex items-center gap-2" style={{ color: '#b54125' }}>
-                      <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#b54125' }} />
+                      <span className="rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#b54125' }} />
                       Enregistrement en cours…
                     </div>
                   )}
@@ -2164,17 +2363,18 @@ Contraintes :
 
         {mode === 'ecos-results' && ecosCase && ecosEvaluation && ecosScore && (
           <>
+            {ecosScore.sur20 >= 18 && <Confetti />}
             <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div className="mono text-xs mb-2" style={{ color: '#8a8a8a' }}>
+              <div className="mono text-xs mb-2 anim-fade-up" style={{ color: '#8a8a8a' }}>
                 {ecosCase.titre} · {ecosCase.specialite}
               </div>
-              <div className="display text-5xl mb-2" style={{ fontWeight: 600 }}>
+              <div className="display text-5xl mb-2 score-reveal" style={{ fontWeight: 600 }}>
                 {ecosScore.sur20} / 20
               </div>
-              <div className="text-sm" style={{ color: '#5a5a5a' }}>
+              <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
                 {ecosScore.obtenu} / {ecosScore.total} points · {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} %
               </div>
-              <div className="flex justify-center gap-2 mt-6">
+              <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-3">
                 <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
                   className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
                 <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
@@ -2192,10 +2392,9 @@ Contraintes :
                       <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{s.obtenu} / {s.max}</span>
                     </div>
                     <div className="h-2" style={{ background: '#d6d0c1' }}>
-                      <div className="h-full" style={{
+                      <div className="h-full progress-bar" style={{
                         width: `${pct}%`,
                         background: pct >= 75 ? '#6b9d4d' : pct >= 50 ? '#c4a84d' : '#b54125',
-                        transition: 'width .3s',
                       }} />
                     </div>
                   </div>
@@ -2359,8 +2558,8 @@ Contraintes :
                       {(q.hasNoCorrect || q.hasNoAnswer) && (
                         <span className="text-xs" style={{ color: '#b54125' }}>⚠ aucune réponse</span>
                       )}
-                      <button onClick={() => toggleFavorite(q.id)} className="text-base" title="Marquer comme favori">
-                        <span style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>{q.favorite ? '★' : '☆'}</span>
+                      <button onClick={() => toggleFavorite(q.id)} className="text-base star-btn" title="Marquer comme favori">
+                        <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>{q.favorite ? '★' : '☆'}</span>
                       </button>
                     </div>
                   </div>
@@ -2437,22 +2636,21 @@ Contraintes :
                   </div>
                 </div>
                 <div className="h-1" style={{ background: '#d6d0c1' }}>
-                  <div className="h-full" style={{
+                  <div className="h-full progress-bar" style={{
                     background: '#1a1a1a', width: `${((quizIdx + (feedback ? 1 : 0)) / totalQuiz) * 100}%`,
-                    transition: 'width .3s',
                   }} />
                 </div>
               </div>
 
-              <div className="p-8 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
+              <div key={quizIdx} className="p-8 border anim-fade-up" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <span className="mono text-xs px-2 py-0.5" style={{
                     background: q.type === 'qcm' ? '#fce8e1' : '#ebe1f5',
                     color: q.type === 'qcm' ? '#b54125' : '#7a4fb5',
                   }}>{q.type.toUpperCase()}</span>
                   <span className="mono text-xs" style={{ color: '#8a8a8a' }}>p.{q.pageNum}</span>
-                  <button onClick={() => toggleFavorite(q.id)} className="ml-auto text-lg" title="Favori">
-                    <span style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>{q.favorite ? '★' : '☆'}</span>
+                  <button onClick={() => toggleFavorite(q.id)} className="ml-auto text-lg star-btn" title="Favori">
+                    <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>{q.favorite ? '★' : '☆'}</span>
                   </button>
                 </div>
 
@@ -2525,7 +2723,7 @@ Contraintes :
                 )}
 
                 {feedback && (
-                  <div className="p-4 mb-6" style={{
+                  <div className="p-4 mb-6 feedback-card" style={{
                     background: feedback.verdict === 'correct' ? '#e6f3e0'
                               : feedback.verdict === 'partiel' ? '#fff8e0'
                               : '#f8e0d6',
@@ -2567,19 +2765,22 @@ Contraintes :
 
         {mode === 'results' && (
           <>
+            {quizStats.total > 0 && quizStats.correct === quizStats.total && (
+              <Confetti />
+            )}
             <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div className="display text-5xl mb-2" style={{ fontWeight: 600 }}>
+              <div className="display text-5xl mb-2 score-reveal" style={{ fontWeight: 600 }}>
                 {quizStats.correct} / {quizStats.total}
               </div>
-              <div className="text-sm" style={{ color: '#5a5a5a' }}>
+              <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
                 {Math.round((quizStats.correct / quizStats.total) * 100)} % de bonnes réponses
               </div>
-              <div className="flex justify-center gap-4 mt-4 mono text-sm">
+              <div className="flex justify-center gap-4 mt-4 mono text-sm anim-fade-up anim-stagger-3">
                 <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct} correctes</span>
                 {quizStats.partial > 0 && <span style={{ color: '#c4a84d' }}>~ {quizStats.partial} partielles</span>}
                 <span style={{ color: '#b54125' }}>✗ {quizStats.incorrect} incorrectes</span>
               </div>
-              <div className="flex justify-center gap-2 mt-6">
+              <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-4">
                 <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Refaire (aléatoire)</button>
                 <button onClick={() => {
                   const errs = results.filter(r => r.feedback?.verdict !== 'correct').map(r => r.question);
