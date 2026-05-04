@@ -60,6 +60,25 @@ export async function deleteEcosCase(caseId) {
   if (error) throw error;
 }
 
+// ---------- ECOS attempts (dernier passage par cas) ----------
+export async function listEcosAttempts() {
+  const { data, error } = await supabase
+    .from('ecos_attempts')
+    .select('case_id, data, updated_at')
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function upsertEcosAttempt(attempt) {
+  if (!attempt?.case_id || !attempt?.data) return;
+  const row = { case_id: attempt.case_id, data: attempt.data, updated_at: new Date().toISOString() };
+  const { error } = await supabase
+    .from('ecos_attempts')
+    .upsert(row, { onConflict: 'user_id,case_id' });
+  if (error) throw error;
+}
+
 // ---------- Entretiens (audio + transcription + note, 24h) ----------
 const ENTRETIENS_BUCKET = 'entretiens';
 
