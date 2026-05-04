@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
@@ -128,7 +128,7 @@ const Confetti = ({ count = 36 }) => {
 // ---------- Helpers ----------
 const normalize = (s) =>
   s.toLowerCase()
-    .normalize('NFD').replace(/[Ì€-Í¯]/g, '')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
     .replace(/[^\w\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
