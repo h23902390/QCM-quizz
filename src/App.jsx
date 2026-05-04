@@ -309,8 +309,21 @@ export default function App() {
   const [entAudioName, setEntAudioName] = useState('');
   const [entTranscript, setEntTranscript] = useState('');
   const [entNote, setEntNote] = useState('');
+  const [entReferralMail, setEntReferralMail] = useState('');
+  const [entPrescription, setEntPrescription] = useState('');
+  const [entPrescriptionDraft, setEntPrescriptionDraft] = useState('');
+  const [entGeneratingDoc, setEntGeneratingDoc] = useState('');
+  const [entPrescriptionListening, setEntPrescriptionListening] = useState(false);
   const [entError, setEntError] = useState(null);
   const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'étudiant
+  const [entPatientFirstName, setEntPatientFirstName] = useState('');
+  const [entPatientLastName, setEntPatientLastName] = useState('');
+  const [entDoctorName, setEntDoctorName] = useState(() => {
+    try { return localStorage.getItem('doctor_name') || ''; } catch { return ''; }
+  });
+  const [entDoctorSignature, setEntDoctorSignature] = useState(() => {
+    try { return localStorage.getItem('doctor_signature') || ''; } catch { return ''; }
+  });
   const [entProgress, setEntProgress] = useState({ current: 0, total: 0 });
   const [entRecordId, setEntRecordId] = useState(null); // id de la ligne entretiens en cours
   const [entHistory, setEntHistory] = useState([]); // historique 24h
@@ -321,6 +334,7 @@ export default function App() {
   const entStreamRef = useRef(null);
   const entTimerRef = useRef(null);
   const entFileInputRef = useRef(null);
+  const entPrescriptionRecRef = useRef(null);
 
   // Tick durée enregistrement
   useEffect(() => {
@@ -342,6 +356,26 @@ export default function App() {
     return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   };
 
+  const stripClinicalMarkdown = (text = '') => cleanMarkdownNoise(text)
+    .replace(/^#{1,6}\s*/gm, '')
+    .trim();
+
+  const patientFullName = () => [entPatientFirstName, entPatientLastName].map(s => s.trim()).filter(Boolean).join(' ');
+
+  const persistDoctorProfile = async (name = entDoctorName, signature = entDoctorSignature) => {
+    try {
+      localStorage.setItem('doctor_name', name || '');
+      localStorage.setItem('doctor_signature', signature || '');
+    } catch {}
+    if (supabaseEnabled && session) {
+      try {
+        await supabase.auth.updateUser({ data: { doctor_name: name || '', doctor_signature: signature || '' } });
+      } catch (e) {
+        console.warn('saveDoctorProfile', e);
+      }
+    }
+  };
+
   const resetEntretien = () => {
     if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
     setEntStep('idle');
@@ -352,11 +386,22 @@ export default function App() {
     setEntAudioName('');
     setEntTranscript('');
     setEntNote('');
+    setEntReferralMail('');
+    setEntPrescription('');
+    setEntPrescriptionDraft('');
+    setEntGeneratingDoc('');
+    setEntPrescriptionListening(false);
     setEntError(null);
     setEntProgress({ current: 0, total: 0 });
     setEntRecordId(null);
     setEntContext('');
+    setEntPatientFirstName('');
+    setEntPatientLastName('');
     entChunksRef.current = [];
+    if (entPrescriptionRecRef.current) {
+      try { entPrescriptionRecRef.current.stop(); } catch {}
+      entPrescriptionRecRef.current = null;
+    }
   };
 
   // Upload Supabase d'un blob audio (auto si connecté)
@@ -374,6 +419,33 @@ export default function App() {
       return null;
     } finally {
       setEntUploading(false);
+    }
+  };
+
+  const saveCurrentEntretien = async () => {
+    if (!entAudioBlob) return;
+    if (!supabaseEnabled || !session) { setShowAuth(true); return; }
+    setEntError(null);
+    let id = entRecordId;
+    if (!id) {
+      const row = await uploadEntretienToSupabase(entAudioBlob, entAudioName || 'audio.webm', entRecMs || null);
+      id = row?.id;
+    }
+    if (!id) return;
+    try {
+      await updateEntretien(id, {
+        transcript: entTranscript || null,
+        note: entNote || null,
+        context: entContext || null,
+        referral_mail: entReferralMail || null,
+        prescription: entPrescription || null,
+        doctor_name: entDoctorName || null,
+        doctor_signature: entDoctorSignature || null,
+      });
+      await persistDoctorProfile();
+      try { setEntHistory(await listEntretiens()); } catch {}
+    } catch (e) {
+      setEntError('Sauvegarde : ' + e.message);
     }
   };
 
@@ -409,7 +481,11 @@ export default function App() {
       setEntAudioName(row.filename || 'audio.webm');
       setEntTranscript(row.transcript || '');
       setEntNote(row.note || '');
+      setEntReferralMail(row.referral_mail || '');
+      setEntPrescription(row.prescription || '');
       setEntContext(row.context || '');
+      setEntDoctorName(row.doctor_name || entDoctorName);
+      setEntDoctorSignature(row.doctor_signature || entDoctorSignature);
       setEntRecordId(row.id);
       setEntStep(row.note ? 'done' : (row.transcript ? 'transcribed' : 'have-audio'));
     } catch (e) {
@@ -435,6 +511,9 @@ export default function App() {
     setEntAudioName('');
     setEntTranscript('');
     setEntNote('');
+    setEntReferralMail('');
+    setEntPrescription('');
+    setEntPrescriptionDraft('');
     setEntRecMs(0);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -460,8 +539,6 @@ export default function App() {
         setEntAudioName(fname);
         setEntStep('have-audio');
         setEntRecording(false);
-        // auto-upload Supabase si connecté
-        uploadEntretienToSupabase(blob, fname, entRecMs);
       };
       entMRRef.current = mr;
       mr.start();
@@ -491,9 +568,11 @@ export default function App() {
     setEntAudioName(file.name);
     setEntTranscript('');
     setEntNote('');
+    setEntReferralMail('');
+    setEntPrescription('');
+    setEntPrescriptionDraft('');
     setEntStep('have-audio');
     setEntRecordId(null);
-    uploadEntretienToSupabase(file, file.name, null);
   };
 
   const transcribeEntChunk = async (blob, filename) => {
@@ -594,32 +673,36 @@ export default function App() {
     setEntStep('generating');
     setEntNote('');
     try {
-      const sys = `Tu es un médecin senior qui rédige une observation clinique structurée à partir de la transcription brute d'un entretien médical étudiant–patient. Ta restitution doit être : claire, professionnelle, sans invention (n'ajoute rien qui ne soit pas dans le texte ; mentionne explicitement "non précisé" si une rubrique est absente), et structurée en Markdown avec EXACTEMENT ces sections (titres en ##) :
+      const sys = `Tu es un médecin senior qui rédige une observation clinique structurée à partir de la transcription brute d'un entretien médical étudiant-patient. Ta restitution doit être claire, professionnelle, sans invention (n'ajoute rien qui ne soit pas dans le texte ; mentionne explicitement "non précisé" si une rubrique est absente). N'utilise jamais de Markdown : aucun #, aucun ##. Utilise uniquement des titres en texte simple suivis de deux-points, avec exactement ces sections :
 
-## Motif de consultation
-## Histoire de la maladie actuelle
-## Antécédents
+Motif de consultation :
+Histoire de la maladie actuelle :
+Antécédents :
 - Médicaux
 - Chirurgicaux
 - Familiaux
 - Gynéco-obstétricaux (si pertinent)
 - Allergies
-## Mode de vie
+Mode de vie :
 (tabac, alcool, drogues, profession, contexte social)
-## Traitements en cours
-## Symptômes associés / revue des systèmes
-## Examen clinique
+Traitements en cours :
+Symptômes associés / revue des systèmes :
+Examen clinique :
 (uniquement si évoqué dans l'entretien)
-## Synthèse
+Synthèse :
 (3-5 lignes : résumé du cas, hypothèses diagnostiques évoquées par l'étudiant ou plausibles, points à creuser)
-## Points forts de l'entretien
-## Points à améliorer
+Points forts de l'entretien :
+Points à améliorer :
+Médecin :
 
-Reste fidèle au contenu, reformule proprement (sans guillemets), corrige les fautes de transcription évidentes. Ne diagnostique pas à la place — propose seulement des hypothèses si elles aident l'étudiant.`;
+Reste fidèle au contenu, reformule proprement (sans guillemets), corrige les fautes de transcription évidentes. Ne diagnostique pas à la place. Ajoute le patient et le médecin seulement si fournis. Termine par la signature du médecin si elle est fournie.`;
       const userMsg = `Transcription brute de l'entretien :
 
 ${entTranscript}
 
+Patient : ${patientFullName() || 'non précisé'}
+Médecin : ${entDoctorName || 'non précisé'}
+Signature souhaitée : ${entDoctorSignature || 'non précisée'}
 ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
       const resp = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -638,17 +721,175 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
         throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
       }
       const data = await resp.json();
-      const txt = (data.choices?.[0]?.message?.content || '').trim();
+      const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
       setEntNote(txt);
       setEntStep('done');
       if (entRecordId) {
-        try { await updateEntretien(entRecordId, { note: txt, context: entContext || null }); } catch (e) { console.warn(e); }
+        try {
+          await updateEntretien(entRecordId, {
+            note: txt,
+            context: entContext || null,
+            doctor_name: entDoctorName || null,
+            doctor_signature: entDoctorSignature || null,
+          });
+        } catch (e) { console.warn(e); }
       }
       try { setEntHistory(await listEntretiens()); } catch {}
     } catch (e) {
       setEntError(e.message);
       setEntStep('transcribed');
     }
+  };
+
+  const generateEntReferralMail = async () => {
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!entTranscript.trim() && !entNote.trim()) { setEntError('Génère d’abord une transcription ou un compte rendu.'); return; }
+    setEntError(null);
+    setEntGeneratingDoc('mail');
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: `Rédige un mail médical professionnel destiné à un confrère. Pas de Markdown, aucun #. Ton sobre, clair, synthétique. Inclure objet, formule d'appel, résumé, question posée au confrère, conclusion. Termine par la signature du médecin si fournie.`,
+            },
+            {
+              role: 'user',
+              content: `Patient : ${patientFullName() || 'non précisé'}
+Médecin expéditeur : ${entDoctorName || 'non précisé'}
+Signature : ${entDoctorSignature || 'non précisée'}
+Contexte : ${entContext || 'non précisé'}
+
+Compte rendu :
+${entNote || 'non généré'}
+
+Transcription :
+${entTranscript}`,
+            },
+          ],
+          temperature: 0.25,
+        }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
+      setEntReferralMail(txt);
+      if (entRecordId) {
+        try { await updateEntretien(entRecordId, { referral_mail: txt, doctor_name: entDoctorName || null, doctor_signature: entDoctorSignature || null }); } catch (e) { console.warn(e); }
+      }
+      try { setEntHistory(await listEntretiens()); } catch {}
+    } catch (e) {
+      setEntError(e.message);
+    } finally {
+      setEntGeneratingDoc('');
+    }
+  };
+
+  const generateEntPrescription = async () => {
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!entTranscript.trim() && !entNote.trim() && !entPrescriptionDraft.trim()) {
+      setEntError('Ajoute une consigne, une transcription ou un compte rendu avant de générer l’ordonnance.');
+      return;
+    }
+    setEntError(null);
+    setEntGeneratingDoc('prescription');
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'system',
+              content: `Tu aides un médecin à préparer une ordonnance à partir de ses consignes et d'un entretien. Pas de Markdown, aucun #. Ne prescris rien si l'information est insuffisante : indique "à compléter par le médecin". Structure : Identité patient, Date, Ordonnance, Conseils, Signature. Le médecin reste responsable de valider.`,
+            },
+            {
+              role: 'user',
+              content: `Patient : ${patientFullName() || 'non précisé'}
+Médecin : ${entDoctorName || 'non précisé'}
+Signature : ${entDoctorSignature || 'non précisée'}
+Consignes dictées/écrites par le médecin :
+${entPrescriptionDraft || 'aucune'}
+
+Compte rendu :
+${entNote || 'non généré'}
+
+Transcription :
+${entTranscript}`,
+            },
+          ],
+          temperature: 0.2,
+        }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
+      setEntPrescription(txt);
+      if (entRecordId) {
+        try { await updateEntretien(entRecordId, { prescription: txt, doctor_name: entDoctorName || null, doctor_signature: entDoctorSignature || null }); } catch (e) { console.warn(e); }
+      }
+      try { setEntHistory(await listEntretiens()); } catch {}
+    } catch (e) {
+      setEntError(e.message);
+    } finally {
+      setEntGeneratingDoc('');
+    }
+  };
+
+  const togglePrescriptionDictation = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setEntError('Dictée ordonnance non disponible dans ce navigateur.');
+      return;
+    }
+    if (entPrescriptionRecRef.current) {
+      try { entPrescriptionRecRef.current.stop(); } catch {}
+      entPrescriptionRecRef.current = null;
+      setEntPrescriptionListening(false);
+      return;
+    }
+    setEntError(null);
+    const rec = new SpeechRecognition();
+    rec.lang = 'fr-FR';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (event) => {
+      let finalTxt = '';
+      let interimTxt = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const txt = event.results[i][0]?.transcript || '';
+        if (event.results[i].isFinal) finalTxt += txt;
+        else interimTxt += txt;
+      }
+      if (finalTxt) {
+        setEntPrescriptionDraft(prev => `${prev}${prev ? ' ' : ''}${finalTxt.trim()}`.trim());
+      }
+      if (interimTxt) setEntError(`Dictée en cours : ${interimTxt.trim()}`);
+    };
+    rec.onerror = (e) => {
+      setEntError('Dictée ordonnance : ' + (e.error || 'erreur micro'));
+      setEntPrescriptionListening(false);
+      entPrescriptionRecRef.current = null;
+    };
+    rec.onend = () => {
+      setEntPrescriptionListening(false);
+      entPrescriptionRecRef.current = null;
+      setEntError(null);
+    };
+    entPrescriptionRecRef.current = rec;
+    setEntPrescriptionListening(true);
+    rec.start();
   };
 
   const persistCustomCases = (arr) => {
@@ -1162,6 +1403,14 @@ Contraintes :
       if (meta.model && meta.model !== model) {
         setModel(meta.model);
         try { localStorage.setItem('model', meta.model); } catch {}
+      }
+      if (meta.doctor_name) {
+        setEntDoctorName(meta.doctor_name);
+        try { localStorage.setItem('doctor_name', meta.doctor_name); } catch {}
+      }
+      if (meta.doctor_signature) {
+        setEntDoctorSignature(meta.doctor_signature);
+        try { localStorage.setItem('doctor_signature', meta.doctor_signature); } catch {}
       }
     }).catch(e => console.warn('getUser', e));
     listDecks().then(setDecks).catch(e => console.warn('listDecks', e));
@@ -3387,6 +3636,47 @@ Contraintes :
             </div>
           )}
 
+          <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
+            <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>Infos document</h2>
+            <div className="grid md:grid-cols-2 gap-3 mb-3">
+              <input
+                type="text"
+                value={entPatientFirstName}
+                onChange={(e) => setEntPatientFirstName(e.target.value)}
+                placeholder="Prénom patient (non stocké)"
+                className="input-field text-sm"
+              />
+              <input
+                type="text"
+                value={entPatientLastName}
+                onChange={(e) => setEntPatientLastName(e.target.value)}
+                placeholder="Nom patient (non stocké)"
+                className="input-field text-sm"
+              />
+            </div>
+            <div className="grid md:grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={entDoctorName}
+                onChange={(e) => setEntDoctorName(e.target.value)}
+                onBlur={() => persistDoctorProfile()}
+                placeholder="Nom et prénom du médecin"
+                className="input-field text-sm"
+              />
+              <input
+                type="text"
+                value={entDoctorSignature}
+                onChange={(e) => setEntDoctorSignature(e.target.value)}
+                onBlur={() => persistDoctorProfile()}
+                placeholder="Signature à ajouter en fin de document"
+                className="input-field text-sm"
+              />
+            </div>
+            <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+              L'identité patient sert seulement à générer les documents affichés ici. Le profil médecin est conservé sur Supabase.
+            </p>
+          </section>
+
           {/* Étape 1 : capture audio */}
           <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
             <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>1. Audio</h2>
@@ -3432,10 +3722,22 @@ Contraintes :
                 </div>
                 {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-3" />}
                 <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={saveCurrentEntretien}
+                    disabled={entUploading}
+                    className="btn-primary px-3 py-2 text-xs"
+                  >
+                    {entRecordId ? 'Enregistrer les modifications' : 'Enregistrer l’audio'}
+                  </button>
                   <button onClick={resetEntretien} className="btn-secondary px-3 py-2 text-xs">
                     ↺ Recommencer
                   </button>
                 </div>
+                {supabaseEnabled && !session && (
+                  <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+                    Connecte-toi pour enregistrer cet audio sur Supabase.
+                  </p>
+                )}
               </div>
             )}
           </section>
@@ -3511,6 +3813,13 @@ Contraintes :
                   </pre>
                   <div className="mt-4 flex gap-2">
                     <button
+                      onClick={saveCurrentEntretien}
+                      disabled={entUploading}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      Enregistrer
+                    </button>
+                    <button
                       onClick={() => navigator.clipboard.writeText(entNote)}
                       className="btn-secondary px-3 py-1.5 text-xs"
                     >
@@ -3531,6 +3840,75 @@ Contraintes :
                   </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {(entStep === 'done' || entNote || entTranscript) && (
+            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
+              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>4. Courrier et ordonnance</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <h3 className="text-sm" style={{ fontWeight: 600 }}>Mail à un confrère</h3>
+                    <button
+                      onClick={generateEntReferralMail}
+                      disabled={!apiKey || entGeneratingDoc === 'mail'}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      {entGeneratingDoc === 'mail' ? 'Génération…' : 'Générer'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={entReferralMail}
+                    onChange={(e) => setEntReferralMail(e.target.value)}
+                    placeholder="Le mail généré apparaîtra ici. Tu peux aussi l’écrire à la main."
+                    className="input-field w-full text-sm"
+                    rows={10}
+                    style={{ fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(entReferralMail)} disabled={!entReferralMail} className="btn-secondary px-3 py-1.5 text-xs">Copier</button>
+                    <button onClick={saveCurrentEntretien} disabled={entUploading} className="btn-secondary px-3 py-1.5 text-xs">Enregistrer</button>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <h3 className="text-sm" style={{ fontWeight: 600 }}>Ordonnance</h3>
+                    <button
+                      onClick={generateEntPrescription}
+                      disabled={!apiKey || entGeneratingDoc === 'prescription'}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      {entGeneratingDoc === 'prescription' ? 'Génération…' : 'Suggérer IA'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={entPrescriptionDraft}
+                    onChange={(e) => setEntPrescriptionDraft(e.target.value)}
+                    placeholder="Consigne optionnelle : dicte ou écris ce que tu veux prescrire avant suggestion IA."
+                    className="input-field w-full text-sm mb-2"
+                    rows={4}
+                    style={{ fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                  <div className="mb-2">
+                    <button onClick={togglePrescriptionDictation} className="btn-secondary px-3 py-1.5 text-xs">
+                      {entPrescriptionListening ? 'Arrêter la dictée' : 'Dicter la consigne'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={entPrescription}
+                    onChange={(e) => setEntPrescription(e.target.value)}
+                    placeholder="Ordonnance générée ou rédigée manuellement."
+                    className="input-field w-full text-sm"
+                    rows={10}
+                    style={{ fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(entPrescription)} disabled={!entPrescription} className="btn-secondary px-3 py-1.5 text-xs">Copier</button>
+                    <button onClick={saveCurrentEntretien} disabled={entUploading} className="btn-secondary px-3 py-1.5 text-xs">Enregistrer</button>
+                  </div>
+                </div>
+              </div>
             </section>
           )}
 

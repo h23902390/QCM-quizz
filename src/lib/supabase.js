@@ -102,7 +102,7 @@ export async function purgeExpiredEntretiens() {
 export async function listEntretiens() {
   const { data, error } = await supabase
     .from('entretiens')
-    .select('id, storage_path, filename, duration_ms, size_bytes, transcript, note, context, created_at, expires_at')
+    .select('id, storage_path, filename, duration_ms, size_bytes, transcript, note, context, referral_mail, prescription, doctor_name, doctor_signature, created_at, expires_at')
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
   if (error) throw error;

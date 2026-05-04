@@ -109,9 +109,18 @@ create table if not exists public.entretiens (
   transcript text,
   note text,
   context text,
+  referral_mail text,
+  prescription text,
+  doctor_name text,
+  doctor_signature text,
   created_at timestamptz not null default now(),
   expires_at timestamptz not null default (now() + interval '24 hours')
 );
+
+alter table public.entretiens add column if not exists referral_mail text;
+alter table public.entretiens add column if not exists prescription text;
+alter table public.entretiens add column if not exists doctor_name text;
+alter table public.entretiens add column if not exists doctor_signature text;
 
 alter table public.entretiens enable row level security;
 
