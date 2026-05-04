@@ -46,6 +46,44 @@ const IconEyeOff = (p) => <Icon {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 1
 const IconArrowLeft = (p) => <Icon {...p}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></Icon>;
 const IconWarning = (p) => <Icon {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Icon>;
 
+// ---------- Hook : scroll-reveal via IntersectionObserver ----------
+const useScrollReveal = (threshold = 0.12) => {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setShown(true); return;
+    }
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { for (const e of entries) if (e.isIntersecting) { setShown(true); io.disconnect(); break; } },
+      { threshold }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [threshold]);
+  return [ref, shown];
+};
+
+// ---------- Composants premium : Eyebrow, Reveal ----------
+const Eyebrow = ({ children, accent = false, ...props }) => (
+  <span className={`eyebrow ${accent ? 'eyebrow--accent' : ''}`} {...props}>{children}</span>
+);
+
+const Reveal = ({ children, delay = 0, className = '', as: As = 'div', ...props }) => {
+  const [ref, shown] = useScrollReveal();
+  return (
+    <As ref={ref}
+        className={`reveal ${shown ? 'reveal--in' : ''} ${className}`}
+        style={{ transitionDelay: shown ? `${delay}ms` : '0ms' }}
+        {...props}>
+      {children}
+    </As>
+  );
+};
+
 // ---------- TabBar avec indicateur slide ----------
 const TabBar = ({ tabs, activeKey, onSelect }) => {
   const containerRef = useRef(null);
@@ -2215,7 +2253,9 @@ Contraintes :
     <div className="min-h-screen w-full" style={{
       background: '#f6f3ec', color: '#1a1a1a',
       fontFamily: "'Public Sans', system-ui, sans-serif",
+      position: 'relative',
     }}>
+      <div className="paper-grain" aria-hidden="true" />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap');
 
@@ -2540,6 +2580,106 @@ Contraintes :
           animation: confettiDrop 2.4s var(--ease-out-quart) forwards;
         }
 
+        /* ---------- Premium : eyebrow tags ---------- */
+        .eyebrow {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 10px; font-weight: 500;
+          letter-spacing: 0.22em; text-transform: uppercase;
+          color: var(--c-ink-mute);
+          padding: 4px 10px;
+          border: 1px solid var(--c-line);
+          border-radius: 999px;
+          background: var(--c-surface);
+        }
+        .eyebrow::before {
+          content: ''; width: 6px; height: 6px; border-radius: 50%;
+          background: var(--c-accent);
+          box-shadow: 0 0 0 2px rgba(181,65,37,0.16);
+        }
+        .eyebrow--accent { color: var(--c-accent); border-color: rgba(181,65,37,0.28); }
+
+        /* ---------- Premium : double-bezel (carte dans une carte) ---------- */
+        .bezel {
+          padding: 6px;
+          background: linear-gradient(180deg, #efeadc 0%, #e6dfc8 100%);
+          border: 1px solid #d6d0c1;
+          border-radius: calc(var(--r-md) + 6px);
+          box-shadow: var(--shadow-card);
+          transition: box-shadow var(--d-base) var(--ease-out-quart),
+                      transform var(--d-base) var(--ease-out-quart);
+        }
+        .bezel:hover { box-shadow: var(--shadow-lift); transform: translateY(-2px); }
+        .bezel-inner {
+          background: var(--c-surface);
+          border-radius: var(--r-md);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+          position: relative; overflow: hidden;
+        }
+        .bezel-dropzone .bezel-inner {
+          background: rgba(255,255,255,0.55);
+          border: 1px dashed #b8b09c;
+        }
+        .bezel-dropzone:hover .bezel-inner { background: rgba(255,255,255,0.8); border-color: #8a8273; }
+        .bezel-dropzone--over .bezel-inner { background: #ece7d8; border-color: var(--c-accent); border-style: solid; }
+
+        /* ---------- Premium : CTA orbit (button-in-button arrow) ---------- */
+        .cta-orbit {
+          display: inline-flex; align-items: center; gap: 12px;
+          padding: 10px 10px 10px 22px;
+          background: var(--c-ink); color: var(--c-bg);
+          border-radius: 999px;
+          font-size: 14px; font-weight: 500;
+          transition: background var(--d-base) var(--ease-out-quart),
+                      transform var(--d-base) var(--ease-out-quart),
+                      box-shadow var(--d-base) var(--ease-out-quart);
+        }
+        .cta-orbit:hover { background: var(--c-accent); transform: translateY(-1px); box-shadow: 0 12px 28px -10px rgba(181,65,37,0.45); }
+        .cta-orbit:active { transform: translateY(0) scale(0.98); }
+        .cta-orbit .orbit-icon {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 32px; height: 32px; border-radius: 50%;
+          background: rgba(255,255,255,0.12);
+          transition: transform var(--d-base) var(--ease-out-expo),
+                      background var(--d-base) var(--ease-out-quart);
+        }
+        .cta-orbit:hover .orbit-icon { transform: translateX(3px) translateY(-1px) scale(1.06); background: rgba(255,255,255,0.2); }
+
+        /* Variante claire pour fond sombre/sur carte foncée */
+        .cta-orbit--light {
+          background: var(--c-surface); color: var(--c-ink);
+          border: 1px solid var(--c-line);
+        }
+        .cta-orbit--light:hover { background: var(--c-ink); color: var(--c-bg); border-color: var(--c-ink); }
+        .cta-orbit--light .orbit-icon { background: rgba(26,26,26,0.06); }
+        .cta-orbit--light:hover .orbit-icon { background: rgba(255,255,255,0.18); }
+
+        /* ---------- Premium : scroll-reveal ---------- */
+        .reveal {
+          opacity: 0; transform: translateY(24px);
+          filter: blur(4px);
+          transition: opacity 800ms var(--ease-out-expo),
+                      transform 800ms var(--ease-out-expo),
+                      filter 600ms var(--ease-out-quart);
+          will-change: opacity, transform, filter;
+        }
+        .reveal--in { opacity: 1; transform: translateY(0); filter: blur(0); }
+
+        /* ---------- Premium : paper grain (fixed, performant) ---------- */
+        .paper-grain {
+          position: fixed; inset: 0; pointer-events: none;
+          z-index: 1; opacity: 0.045; mix-blend-mode: multiply;
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0.7 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+        }
+
+        /* ---------- Premium : section macro-spacing ---------- */
+        .section-macro { padding-top: clamp(48px, 7vw, 96px); padding-bottom: clamp(48px, 7vw, 96px); }
+        .section-divider {
+          height: 1px;
+          background: linear-gradient(90deg, transparent 0%, var(--c-line) 18%, var(--c-line) 82%, transparent 100%);
+          margin: clamp(48px, 6vw, 80px) 0;
+        }
+
         /* ---------- Reduced motion ---------- */
         @media (prefers-reduced-motion: reduce) {
           *, *::before, *::after {
@@ -2550,11 +2690,12 @@ Contraintes :
           }
           .qcm-option:hover, .btn-primary:hover, .btn-secondary:hover,
           .card-hover:hover, .star-btn:hover, .arrow-host:hover .arrow-slide,
-          .drop-zone--over { transform: none !important; }
+          .drop-zone--over, .bezel:hover, .cta-orbit:hover .orbit-icon { transform: none !important; }
+          .reveal { opacity: 1 !important; transform: none !important; filter: none !important; }
         }
       `}</style>
 
-      <header className="border-b" style={{ borderColor: '#d6d0c1' }}>
+      <header className="border-b" style={{ borderColor: '#d6d0c1', position: 'relative', zIndex: 2, background: '#f6f3ec' }}>
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && reset()}>
             <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>QCM&nbsp;/ QROC</h1>
@@ -2583,7 +2724,7 @@ Contraintes :
       </header>
 
       {/* Barre de menu — bascule entre les outils */}
-      <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec' }}>
+      <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec', position: 'relative', zIndex: 2 }}>
         <TabBar
           tabs={[
             { key: 'qcm', label: 'QCM / QROC' },
@@ -2699,84 +2840,158 @@ Contraintes :
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' || mode === 'entretien' ? 'none' : '' }}>
+      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' || mode === 'entretien' ? 'none' : '', position: 'relative', zIndex: 2 }}>
 
         {mode === 'home' && (
           <>
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`drop-zone anim-fade-up cursor-pointer border-2 border-dashed flex flex-col items-center justify-center text-center ${dragOver ? 'drop-zone--over' : ''}`}
-              style={{
-                borderColor: dragOver ? '#b54125' : '#b8b09c',
-                background: dragOver ? '#ece7d8' : 'rgba(255,255,255,0.3)',
-                padding: '80px 32px', minHeight: '320px',
-              }}
-            >
-              <input ref={fileInputRef} type="file"
-                accept=".pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                className="hidden"
-                onChange={e => handleFile(e.target.files?.[0])} />
-              <div className="display text-2xl md:text-3xl mb-2" style={{ fontWeight: 500 }}>
-                {processing ? 'Extraction en cours…' : 'Dépose un PDF ou PPTX de cours corrigé'}
-              </div>
-              <div className="text-sm" style={{ color: '#5a5a5a' }}>
-                {processing
-                  ? `${progress.label} (${progress.current}/${progress.total})`
-                  : 'Détection automatique des bonnes réponses (texte vert) + mode quiz interactif'}
-              </div>
-              {processing && progress.total > 0 && (
-                <div className="w-full max-w-md mt-6 h-1" style={{ background: '#d6d0c1' }}>
-                  <div className="h-full progress-bar" style={{
-                    background: '#b54125',
-                    width: `${(progress.current / progress.total) * 100}%`,
-                  }} />
+            {/* Hero : eyebrow + intro typographique */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)' }}>
+              <Reveal className="anim-fade-up">
+                <Eyebrow>Outil 01 / Extraction & Quiz</Eyebrow>
+              </Reveal>
+              <Reveal delay={80} className="anim-fade-up" as="h1">
+                <span className="display block mt-5" style={{
+                  fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)',
+                  lineHeight: 1.02, letterSpacing: '-0.03em',
+                }}>
+                  Tes cours corrigés,<br />
+                  <span style={{ color: 'var(--c-ink-soft)' }}>en quiz prêt à réviser.</span>
+                </span>
+              </Reveal>
+              <Reveal delay={160} className="anim-fade-up">
+                <p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>
+                  Dépose un PDF de cours dont les bonnes réponses sont écrites en vert. L'app détecte, génère
+                  le quiz, te corrige et garde tes erreurs en mémoire.
+                </p>
+              </Reveal>
+            </section>
+
+            {/* Drop zone double-bezel */}
+            <Reveal delay={120}>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`bezel bezel-dropzone cursor-pointer ${dragOver ? 'bezel-dropzone--over' : ''}`}
+                style={{ display: 'block' }}
+              >
+                <div className="bezel-inner flex flex-col items-center justify-center text-center"
+                  style={{ padding: 'clamp(48px, 7vw, 96px) 32px', minHeight: '300px' }}>
+                  <input ref={fileInputRef} type="file"
+                    accept=".pdf,application/pdf,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    className="hidden"
+                    onChange={e => handleFile(e.target.files?.[0])} />
+                  <Eyebrow accent>{processing ? 'En cours' : 'Glisser-déposer'}</Eyebrow>
+                  <div className="display mt-5" style={{
+                    fontWeight: 500,
+                    fontSize: 'clamp(22px, 2.6vw, 32px)',
+                    letterSpacing: '-0.02em',
+                  }}>
+                    {processing ? 'Extraction en cours…' : 'Dépose un PDF ou PPTX'}
+                  </div>
+                  <div className="text-sm mt-2" style={{ color: 'var(--c-ink-soft)' }}>
+                    {processing
+                      ? `${progress.label} (${progress.current}/${progress.total})`
+                      : 'Détection automatique des bonnes réponses + mode quiz interactif'}
+                  </div>
+                  {processing && progress.total > 0 && (
+                    <div className="w-full max-w-md mt-6 h-1" style={{ background: 'var(--c-line)', borderRadius: 999 }}>
+                      <div className="h-full progress-bar" style={{
+                        background: 'var(--c-accent)', borderRadius: 999,
+                        width: `${(progress.current / progress.total) * 100}%`,
+                      }} />
+                    </div>
+                  )}
+                  {error && <div className="text-sm mt-4" style={{ color: 'var(--c-accent)' }}>{error}</div>}
                 </div>
-              )}
-              {error && <div className="text-sm mt-4" style={{ color: '#b54125' }}>{error}</div>}
-            </div>
+              </div>
+            </Reveal>
 
             {supabaseEnabled && session && decks.length > 0 && (
-              <div className="mt-6 flex flex-wrap gap-3 items-center">
+              <Reveal delay={80} className="mt-6 flex flex-wrap gap-3 items-center">
                 <button onClick={() => setMode('library')} className="btn-secondary px-4 py-2 text-sm">
                   Ouvrir un deck sauvegardé ({decks.length})
                 </button>
                 <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
                   <IconStar size={14} filled /> Quiz sur mes favoris ({decks.reduce((n, d) => n + (d.questions || []).filter(q => q.favorite).length, 0)})
                 </button>
-              </div>
+              </Reveal>
             )}
 
-            <div
-              onClick={() => setMode('ecos')}
-              className="arrow-host card-hover anim-fade-up anim-stagger-2 cursor-pointer mt-10 p-7 border flex items-center justify-between gap-6"
-              style={{ borderColor: '#1a1a1a', background: '#fff', borderRadius: 'var(--r-md)' }}
-            >
-              <div>
-                <div className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Entraînement</div>
-                <div className="text-sm" style={{ color: '#5a5a5a' }}>
-                  Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation détaillée /20.
-                </div>
-              </div>
-              <div className="arrow-slide" style={{ color: '#b54125', display: 'inline-flex', alignItems: 'center' }}>
-                <IconArrowRight size={20} stroke={1.5} />
-              </div>
-            </div>
+            <div className="section-divider" />
 
-            <div className="grid md:grid-cols-3 gap-6 mt-10">
-              {[
-                { t: 'Auto-correction', d: 'Détection des bonnes réponses par analyse de la couleur du texte (vert = correct).' },
-                { t: 'Quiz interactif', d: 'Tu réponds, l\'app corrige immédiatement. Score, erreurs, et possibilité de revoir.' },
-                { t: 'Évaluation IA', d: 'Pour les QROC, OpenAI évalue ta réponse même si elle ne matche pas exactement la référence.' },
-              ].map((c, i) => (
-                <div key={i} className={`card-hover anim-fade-up anim-stagger-${3 + i} p-5 border`} style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                  <div className="display text-lg mb-1" style={{ fontWeight: 600 }}>{c.t}</div>
-                  <div className="text-sm" style={{ color: '#5a5a5a' }}>{c.d}</div>
+            {/* Carte ECOS — bezel + CTA orbit */}
+            <section>
+              <Reveal>
+                <Eyebrow>Outil 02 / Simulation clinique</Eyebrow>
+              </Reveal>
+              <Reveal delay={80}>
+                <div
+                  onClick={() => setMode('ecos')}
+                  className="bezel cursor-pointer mt-5"
+                  style={{ display: 'block' }}
+                >
+                  <div className="bezel-inner flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+                    style={{ padding: 'clamp(28px, 3.5vw, 44px)' }}>
+                    <div className="max-w-xl">
+                      <div className="display" style={{
+                        fontWeight: 600,
+                        fontSize: 'clamp(24px, 3vw, 36px)',
+                        letterSpacing: '-0.025em', lineHeight: 1.1,
+                      }}>ECOS — Entraînement</div>
+                      <div className="mt-3 text-sm" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.55 }}>
+                        Examen Clinique Objectif Structuré : patient simulé par IA, dictée vocale, notation
+                        détaillée /20 par section.
+                      </div>
+                    </div>
+                    <span className="cta-orbit shrink-0 self-start md:self-auto">
+                      Démarrer
+                      <span className="orbit-icon"><IconArrowRight size={14} stroke={2} /></span>
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
+              </Reveal>
+            </section>
+
+            <div className="section-divider" />
+
+            {/* Features — eyebrow + grille épurée */}
+            <section>
+              <Reveal>
+                <Eyebrow>Pourquoi cet outil</Eyebrow>
+              </Reveal>
+              <Reveal delay={80}>
+                <h2 className="display mt-5" style={{
+                  fontWeight: 600,
+                  fontSize: 'clamp(28px, 3.4vw, 44px)',
+                  letterSpacing: '-0.02em', lineHeight: 1.1,
+                  maxWidth: '720px',
+                }}>
+                  Trois principes : détection silencieuse, correction immédiate, évaluation honnête.
+                </h2>
+              </Reveal>
+              <div className="grid md:grid-cols-3 gap-5 mt-12">
+                {[
+                  { n: '01', t: 'Auto-correction', d: 'Détection des bonnes réponses par analyse de la couleur du texte (vert = correct).' },
+                  { n: '02', t: 'Quiz interactif', d: 'Tu réponds, l\'app corrige immédiatement. Score, erreurs, et possibilité de revoir.' },
+                  { n: '03', t: 'Évaluation IA', d: 'Pour les QROC, OpenAI évalue ta réponse même si elle ne matche pas exactement la référence.' },
+                ].map((c, i) => (
+                  <Reveal key={i} delay={80 + i * 100}>
+                    <div className="card-hover p-7" style={{
+                      background: 'var(--c-surface)',
+                      border: '1px solid var(--c-line)',
+                      borderRadius: 'var(--r-md)',
+                      height: '100%',
+                    }}>
+                      <div className="mono text-xs mb-6" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{c.n}</div>
+                      <div className="display text-lg mb-2" style={{ fontWeight: 600, letterSpacing: '-0.01em' }}>{c.t}</div>
+                      <div className="text-sm" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.55 }}>{c.d}</div>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+            </section>
           </>
         )}
 
