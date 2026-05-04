@@ -2200,6 +2200,13 @@ Contraintes :
                 {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
+            <div className="mb-4 flex items-center gap-2">
+              <label className="mono text-xs" style={{ color: '#5a5a5a' }}>Catégorie</label>
+              <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1">
+                <option value="all">Toutes</option>
+                {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
 
             {ecosImportOpen && (
               <div className="p-4 mb-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
