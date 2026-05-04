@@ -134,6 +134,238 @@ export default function App() {
   const [ecosBuiltInProgress, setEcosBuiltInProgress] = useState({ current: 0, total: 0 });
   const ecosImportInputRef = useRef(null);
 
+  // ---------- Entretien (écoute + restitution IA) ----------
+  const [entStep, setEntStep] = useState('idle'); // 'idle' | 'have-audio' | 'transcribing' | 'transcribed' | 'generating' | 'done'
+  const [entRecording, setEntRecording] = useState(false);
+  const [entRecMs, setEntRecMs] = useState(0);
+  const [entAudioBlob, setEntAudioBlob] = useState(null);
+  const [entAudioUrl, setEntAudioUrl] = useState(null);
+  const [entAudioName, setEntAudioName] = useState('');
+  const [entTranscript, setEntTranscript] = useState('');
+  const [entNote, setEntNote] = useState('');
+  const [entError, setEntError] = useState(null);
+  const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'étudiant
+  const [entProgress, setEntProgress] = useState({ current: 0, total: 0 });
+  const entMRRef = useRef(null);
+  const entChunksRef = useRef([]);
+  const entStreamRef = useRef(null);
+  const entTimerRef = useRef(null);
+  const entFileInputRef = useRef(null);
+
+  // Tick durée enregistrement
+  useEffect(() => {
+    if (!entRecording) return;
+    const start = Date.now() - entRecMs;
+    const id = setInterval(() => setEntRecMs(Date.now() - start), 250);
+    return () => clearInterval(id);
+  }, [entRecording]);
+
+  // Auto-stop à 30 min
+  useEffect(() => {
+    if (entRecording && entRecMs >= 30 * 60 * 1000) {
+      stopEntRecording();
+    }
+  }, [entRecMs, entRecording]);
+
+  const fmtMs = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  const resetEntretien = () => {
+    if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
+    setEntStep('idle');
+    setEntRecording(false);
+    setEntRecMs(0);
+    setEntAudioBlob(null);
+    setEntAudioUrl(null);
+    setEntAudioName('');
+    setEntTranscript('');
+    setEntNote('');
+    setEntError(null);
+    setEntProgress({ current: 0, total: 0 });
+    entChunksRef.current = [];
+  };
+
+  const startEntRecording = async () => {
+    setEntError(null);
+    if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
+    setEntAudioBlob(null);
+    setEntAudioUrl(null);
+    setEntAudioName('');
+    setEntTranscript('');
+    setEntNote('');
+    setEntRecMs(0);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      entStreamRef.current = stream;
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const mr = mimeType ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 }) : new MediaRecorder(stream);
+      entChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) entChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        try { stream.getTracks().forEach(t => t.stop()); } catch {}
+        entStreamRef.current = null;
+        const type = mr.mimeType || 'audio/webm';
+        const blob = new Blob(entChunksRef.current, { type });
+        if (blob.size === 0) { setEntError('Enregistrement vide.'); setEntRecording(false); return; }
+        const url = URL.createObjectURL(blob);
+        const ext = type.includes('mp4') ? 'mp4' : 'webm';
+        setEntAudioBlob(blob);
+        setEntAudioUrl(url);
+        setEntAudioName(`enregistrement.${ext}`);
+        setEntStep('have-audio');
+        setEntRecording(false);
+      };
+      entMRRef.current = mr;
+      mr.start();
+      setEntRecording(true);
+    } catch (e) {
+      setEntError('Accès micro refusé : ' + e.message);
+    }
+  };
+
+  const stopEntRecording = () => {
+    const mr = entMRRef.current;
+    if (mr && mr.state !== 'inactive') mr.stop();
+  };
+
+  const onEntFilePicked = (file) => {
+    if (!file) return;
+    setEntError(null);
+    const MAX = 100 * 1024 * 1024; // 100 MB hard cap (sera chunké pour Whisper)
+    if (file.size > MAX) {
+      setEntError('Fichier trop gros (>100 Mo). Compresse-le ou découpe-le.');
+      return;
+    }
+    if (entAudioUrl) { try { URL.revokeObjectURL(entAudioUrl); } catch {} }
+    const url = URL.createObjectURL(file);
+    setEntAudioBlob(file);
+    setEntAudioUrl(url);
+    setEntAudioName(file.name);
+    setEntTranscript('');
+    setEntNote('');
+    setEntStep('have-audio');
+  };
+
+  const transcribeEntChunk = async (blob, filename) => {
+    const fd = new FormData();
+    fd.append('file', blob, filename);
+    fd.append('model', 'whisper-1');
+    fd.append('language', 'fr');
+    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: fd,
+    });
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`Whisper ${resp.status} : ${t.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    return (data.text || '').trim();
+  };
+
+  const transcribeEntretien = async () => {
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!entAudioBlob) return;
+    setEntError(null);
+    setEntStep('transcribing');
+    setEntTranscript('');
+    try {
+      const LIMIT = 24 * 1024 * 1024; // 24 Mo par chunk (sécurité sous la limite Whisper)
+      const blob = entAudioBlob;
+      const ext = (entAudioName.split('.').pop() || 'webm').toLowerCase();
+      const baseType = blob.type || 'audio/webm';
+      if (blob.size <= LIMIT) {
+        setEntProgress({ current: 0, total: 1 });
+        const txt = await transcribeEntChunk(blob, `audio.${ext}`);
+        setEntProgress({ current: 1, total: 1 });
+        setEntTranscript(txt);
+      } else {
+        // Découpage byte-level (best-effort) — fonctionne moyennement avec webm.
+        // Pour les fichiers >25Mo, on conseille mp3/m4a en pratique.
+        const total = Math.ceil(blob.size / LIMIT);
+        setEntProgress({ current: 0, total });
+        let acc = '';
+        for (let i = 0; i < total; i++) {
+          const chunk = blob.slice(i * LIMIT, (i + 1) * LIMIT, baseType);
+          const txt = await transcribeEntChunk(chunk, `audio_${i + 1}.${ext}`);
+          acc += (acc ? ' ' : '') + txt;
+          setEntProgress({ current: i + 1, total });
+          setEntTranscript(acc);
+        }
+      }
+      setEntStep('transcribed');
+    } catch (e) {
+      setEntError(e.message);
+      setEntStep('have-audio');
+    }
+  };
+
+  const generateEntNote = async () => {
+    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!entTranscript.trim()) { setEntError('Aucune transcription à exploiter.'); return; }
+    setEntError(null);
+    setEntStep('generating');
+    setEntNote('');
+    try {
+      const sys = `Tu es un médecin senior qui rédige une observation clinique structurée à partir de la transcription brute d'un entretien médical étudiant–patient. Ta restitution doit être : claire, professionnelle, sans invention (n'ajoute rien qui ne soit pas dans le texte ; mentionne explicitement "non précisé" si une rubrique est absente), et structurée en Markdown avec EXACTEMENT ces sections (titres en ##) :
+
+## Motif de consultation
+## Histoire de la maladie actuelle
+## Antécédents
+- Médicaux
+- Chirurgicaux
+- Familiaux
+- Gynéco-obstétricaux (si pertinent)
+- Allergies
+## Mode de vie
+(tabac, alcool, drogues, profession, contexte social)
+## Traitements en cours
+## Symptômes associés / revue des systèmes
+## Examen clinique
+(uniquement si évoqué dans l'entretien)
+## Synthèse
+(3-5 lignes : résumé du cas, hypothèses diagnostiques évoquées par l'étudiant ou plausibles, points à creuser)
+## Points forts de l'entretien
+## Points à améliorer
+
+Reste fidèle au contenu, reformule proprement (sans guillemets), corrige les fautes de transcription évidentes. Ne diagnostique pas à la place — propose seulement des hypothèses si elles aident l'étudiant.`;
+      const userMsg = `Transcription brute de l'entretien :
+
+${entTranscript}
+
+${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: userMsg },
+          ],
+          temperature: 0.3,
+        }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+      }
+      const data = await resp.json();
+      const txt = data.choices?.[0]?.message?.content || '';
+      setEntNote(txt.trim());
+      setEntStep('done');
+    } catch (e) {
+      setEntError(e.message);
+      setEntStep('transcribed');
+    }
+  };
+
   const persistCustomCases = (arr) => {
     setCustomCases(arr);
     try { localStorage.setItem('ecos_custom_cases', JSON.stringify(arr)); } catch {}
@@ -1377,6 +1609,7 @@ Contraintes :
             { key: 'qcm', label: 'QCM / QROC', match: m => m !== 'ecos' && m !== 'analyse' },
             { key: 'ecos', label: 'ECOS', match: m => m === 'ecos' },
             { key: 'analyse', label: 'Analyse partiels', match: m => m === 'analyse' },
+            { key: 'entretien', label: 'Entretien', match: m => m === 'entretien' },
           ].map(t => {
             const active = t.match(mode);
             return (
@@ -1384,11 +1617,13 @@ Contraintes :
                 key={t.key}
                 onClick={() => {
                   if (t.key === 'qcm') {
-                    if (mode === 'ecos' || mode === 'analyse') reset();
+                    if (mode === 'ecos' || mode === 'analyse' || mode === 'entretien') reset();
                   } else if (t.key === 'ecos') {
                     if (mode !== 'ecos') setMode('ecos');
                   } else if (t.key === 'analyse') {
                     if (mode !== 'analyse') setMode('analyse');
+                  } else if (t.key === 'entretien') {
+                    if (mode !== 'entretien') setMode('entretien');
                   }
                 }}
                 className="px-4 py-3 text-sm whitespace-nowrap"
@@ -1493,7 +1728,7 @@ Contraintes :
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' ? 'none' : '' }}>
+      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' || mode === 'entretien' ? 'none' : '' }}>
 
         {mode === 'home' && (
           <>
@@ -2268,6 +2503,168 @@ Contraintes :
         )}
       </main>
 
+      {mode === 'entretien' && (
+        <main className="max-w-4xl mx-auto px-6 py-8">
+          <div className="mb-6">
+            <h1 className="display text-3xl mb-2" style={{ fontWeight: 600 }}>Entretien patient</h1>
+            <p className="text-sm" style={{ color: '#5a5a5a' }}>
+              Enregistre ou importe un entretien (jusqu'à 30 min). L'IA produit une observation médicale structurée.
+            </p>
+          </div>
+
+          {!apiKey && (
+            <div className="mb-4 p-3 text-sm" style={{ background: '#fdf3ee', border: '1px solid #b54125', color: '#b54125' }}>
+              Configure ta clé API OpenAI dans les Réglages pour utiliser cet outil.
+            </div>
+          )}
+          {entError && (
+            <div className="mb-4 p-3 text-sm" style={{ background: '#fdf3ee', border: '1px solid #b54125', color: '#b54125' }}>
+              {entError}
+            </div>
+          )}
+
+          {/* Étape 1 : capture audio */}
+          <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 4 }}>
+            <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>1. Audio</h2>
+
+            {!entAudioBlob && !entRecording && (
+              <div className="flex flex-wrap gap-3">
+                <button onClick={startEntRecording} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
+                  ● Démarrer l'enregistrement
+                </button>
+                <button onClick={() => entFileInputRef.current?.click()} className="btn-secondary px-4 py-2 text-sm">
+                  Importer un fichier audio
+                </button>
+                <input
+                  ref={entFileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => onEntFilePicked(e.target.files?.[0])}
+                />
+              </div>
+            )}
+
+            {entRecording && (
+              <div className="flex items-center gap-4">
+                <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#b54125', animation: 'pulse 1.2s infinite' }} />
+                <span className="mono text-lg">{fmtMs(entRecMs)}</span>
+                <span className="text-xs" style={{ color: '#5a5a5a' }}>(stop auto à 30:00)</span>
+                <button onClick={stopEntRecording} className="btn-primary px-4 py-2 text-sm" style={{ background: '#b54125' }}>
+                  ■ Arrêter
+                </button>
+              </div>
+            )}
+
+            {entAudioBlob && !entRecording && (
+              <div>
+                <div className="flex items-center gap-3 flex-wrap mb-3">
+                  <span className="text-sm">{entAudioName}</span>
+                  <span className="text-xs mono" style={{ color: '#5a5a5a' }}>
+                    {(entAudioBlob.size / (1024 * 1024)).toFixed(2)} Mo
+                  </span>
+                </div>
+                {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-3" />}
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={resetEntretien} className="btn-secondary px-3 py-2 text-xs">
+                    ↺ Recommencer
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Étape 2 : transcription */}
+          {entAudioBlob && (
+            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 4 }}>
+              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>2. Transcription (Whisper)</h2>
+
+              {entStep === 'have-audio' && (
+                <button onClick={transcribeEntretien} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
+                  Transcrire l'audio
+                </button>
+              )}
+
+              {entStep === 'transcribing' && (
+                <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                  Transcription en cours…
+                  {entProgress.total > 1 && ` (segment ${entProgress.current}/${entProgress.total})`}
+                </div>
+              )}
+
+              {entTranscript && (
+                <div className="mt-3">
+                  <textarea
+                    value={entTranscript}
+                    onChange={(e) => setEntTranscript(e.target.value)}
+                    rows={Math.min(20, Math.max(6, entTranscript.split('\n').length + 2))}
+                    className="input-field w-full text-sm"
+                    style={{ fontFamily: 'inherit' }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: '#8a8a8a' }}>
+                    Tu peux corriger la transcription avant la restitution.
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Étape 3 : restitution IA */}
+          {(entStep === 'transcribed' || entStep === 'generating' || entStep === 'done') && (
+            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 4 }}>
+              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>3. Observation structurée</h2>
+
+              {(entStep === 'transcribed' || entStep === 'done') && (
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    value={entContext}
+                    onChange={(e) => setEntContext(e.target.value)}
+                    placeholder="Contexte (optionnel) : ex. consultation de médecine générale, urgences…"
+                    className="input-field w-full text-sm mb-3"
+                  />
+                  <button onClick={generateEntNote} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
+                    {entStep === 'done' ? '↺ Régénérer la restitution' : 'Générer la restitution'}
+                  </button>
+                </div>
+              )}
+
+              {entStep === 'generating' && (
+                <div className="text-sm" style={{ color: '#5a5a5a' }}>Génération en cours…</div>
+              )}
+
+              {entNote && (
+                <div className="mt-4 p-4" style={{ background: '#faf7ef', border: '1px solid #e6dfc8', borderRadius: 4 }}>
+                  <pre className="whitespace-pre-wrap text-sm" style={{ fontFamily: 'inherit', lineHeight: 1.6 }}>
+                    {entNote}
+                  </pre>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(entNote)}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      Copier
+                    </button>
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([entNote], { type: 'text/markdown' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = 'observation.md'; a.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                      }}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      Télécharger (.md)
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+        </main>
+      )}
+
       {mode === 'analyse' && (
         <iframe
           src="/analyse-partiels.html"
@@ -2282,7 +2679,7 @@ Contraintes :
         />
       )}
 
-      {mode !== 'analyse' && (
+      {mode !== 'analyse' && mode !== 'entretien' && (
         <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
           Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
           Les PDF ne quittent jamais ta machine.
