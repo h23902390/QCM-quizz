@@ -371,6 +371,7 @@ export default function App() {
   const [entContext, setEntContext] = useState(''); // contexte optionnel saisi par l'étudiant
   const [entPatientFirstName, setEntPatientFirstName] = useState('');
   const [entPatientLastName, setEntPatientLastName] = useState('');
+  const [entPatientBirthDate, setEntPatientBirthDate] = useState('');
   const [entDoctorName, setEntDoctorName] = useState(() => {
     try { return localStorage.getItem('doctor_name') || ''; } catch { return ''; }
   });
@@ -414,6 +415,18 @@ export default function App() {
     .trim();
 
   const patientFullName = () => [entPatientFirstName, entPatientLastName].map(s => s.trim()).filter(Boolean).join(' ');
+  const patientBirthDateLabel = () => {
+    if (!entPatientBirthDate) return '';
+    try {
+      return new Date(entPatientBirthDate).toLocaleDateString('fr-FR');
+    } catch {
+      return entPatientBirthDate;
+    }
+  };
+  const patientIdentityBlock = () => [
+    `Patient : ${patientFullName() || 'non precise'}`,
+    `Date de naissance : ${patientBirthDateLabel() || 'non precisee'}`,
+  ].join('\n');
 
   const persistDoctorProfile = async (name = entDoctorName, signature = entDoctorSignature) => {
     try {
@@ -450,6 +463,7 @@ export default function App() {
     setEntContext('');
     setEntPatientFirstName('');
     setEntPatientLastName('');
+    setEntPatientBirthDate('');
     entChunksRef.current = [];
     if (entPrescriptionRecRef.current) {
       try { entPrescriptionRecRef.current.stop(); } catch {}
@@ -753,7 +767,7 @@ Reste fidèle au contenu, reformule proprement (sans guillemets), corrige les fa
 
 ${entTranscript}
 
-Patient : ${patientFullName() || 'non précisé'}
+${patientIdentityBlock()}
 Médecin : ${entDoctorName || 'non précisé'}
 Signature souhaitée : ${entDoctorSignature || 'non précisée'}
 ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
@@ -812,7 +826,7 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
             },
             {
               role: 'user',
-              content: `Patient : ${patientFullName() || 'non précisé'}
+              content: `${patientIdentityBlock()}
 Médecin expéditeur : ${entDoctorName || 'non précisé'}
 Signature : ${entDoctorSignature || 'non précisée'}
 Contexte : ${entContext || 'non précisé'}
@@ -866,7 +880,7 @@ ${entTranscript}`,
             },
             {
               role: 'user',
-              content: `Patient : ${patientFullName() || 'non précisé'}
+              content: `${patientIdentityBlock()}
 Médecin : ${entDoctorName || 'non précisé'}
 Signature : ${entDoctorSignature || 'non précisée'}
 Consignes dictées/écrites par le médecin :
@@ -4416,7 +4430,7 @@ Contraintes :
 
           <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
             <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>Infos document</h2>
-            <div className="grid md:grid-cols-2 gap-3 mb-3">
+            <div className="grid md:grid-cols-3 gap-3 mb-3">
               <input
                 type="text"
                 value={entPatientFirstName}
@@ -4429,6 +4443,13 @@ Contraintes :
                 value={entPatientLastName}
                 onChange={(e) => setEntPatientLastName(e.target.value)}
                 placeholder="Nom patient (non stocké)"
+                className="input-field text-sm"
+              />
+              <input
+                type="date"
+                value={entPatientBirthDate}
+                onChange={(e) => setEntPatientBirthDate(e.target.value)}
+                title="Date de naissance patient (non stockee)"
                 className="input-field text-sm"
               />
             </div>
