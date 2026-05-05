@@ -315,6 +315,7 @@ const NVIDIA_MODEL_PRESETS = [
   { value: 'nvidia/nemotron-3-nano-30b-a3b', label: 'Nemotron 3 Nano', hint: 'rapide patient ECOS' },
   { value: 'nvidia/mistral-nemo-minitron-8b-base', label: 'Minitron 8B', hint: 'tres rapide a tester' },
 ];
+const isPresetNvidiaModel = (value) => NVIDIA_MODEL_PRESETS.some(p => p.value === value);
 const DEFAULT_NVIDIA_SERVICE_SETTINGS = {
   qroc: { model: 'z-ai/glm4.7', temperature: 0.25, topP: 0.9, maxTokens: 2500, thinking: false },
   ecosPatient: { model: ECOS_PATIENT_NVIDIA_MODEL, temperature: 0.6, topP: 0.9, maxTokens: 70, thinking: false },
@@ -3970,7 +3971,17 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 <span className="text-sm">Activer les modeles NVIDIA serveur</span>
               </label>
               <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele NVIDIA par defaut</label>
-              <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full mb-3" placeholder="z-ai/glm4.7" />
+              <div className="grid md:grid-cols-2 gap-2 mb-3">
+                <select
+                  value={isPresetNvidiaModel(nvidiaModel) ? nvidiaModel : '__custom'}
+                  onChange={e => e.target.value !== '__custom' && persistNvidiaModel(e.target.value)}
+                  className="input-field w-full text-xs"
+                >
+                  {NVIDIA_MODEL_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label} - {p.hint}</option>)}
+                  <option value="__custom">Modele personnalise</option>
+                </select>
+                <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full text-xs" placeholder="id modele NVIDIA" />
+              </div>
               <div className="grid md:grid-cols-2 gap-3">
                 {AI_SERVICES.map(svc => (
                   <label key={svc.key} className="text-xs">
@@ -4007,15 +4018,22 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                         <div className="grid md:grid-cols-4 gap-2">
                           <label className="text-[11px] md:col-span-2">
                             <span className="block mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Modele</span>
-                            <input
-                              list={`nvidia-models-${svc.key}`}
-                              value={cfg.model || ''}
-                              onChange={e => persistNvidiaServiceSetting(svc.key, 'model', e.target.value)}
-                              className="input-field w-full text-xs"
-                            />
-                            <datalist id={`nvidia-models-${svc.key}`}>
-                              {NVIDIA_MODEL_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label} - {p.hint}</option>)}
-                            </datalist>
+                            <div className="grid gap-2">
+                              <select
+                                value={isPresetNvidiaModel(cfg.model) ? cfg.model : '__custom'}
+                                onChange={e => e.target.value !== '__custom' && persistNvidiaServiceSetting(svc.key, 'model', e.target.value)}
+                                className="input-field w-full text-xs"
+                              >
+                                {NVIDIA_MODEL_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label} - {p.hint}</option>)}
+                                <option value="__custom">Modele personnalise</option>
+                              </select>
+                              <input
+                                value={cfg.model || ''}
+                                onChange={e => persistNvidiaServiceSetting(svc.key, 'model', e.target.value)}
+                                className="input-field w-full text-xs"
+                                placeholder="id modele NVIDIA"
+                              />
+                            </div>
                           </label>
                           <label className="text-[11px]">
                             <span className="block mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Temp.</span>
