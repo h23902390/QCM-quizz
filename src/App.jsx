@@ -485,6 +485,10 @@ export default function App() {
   const [qcmGenProcessing, setQcmGenProcessing] = useState(false);
   const [qcmGenError, setQcmGenError] = useState(null);
   const [qcmGenSaved, setQcmGenSaved] = useState(false);
+  const [qcmGenDraft, setQcmGenDraft] = useState(null);
+  const [qcmGenDeckName, setQcmGenDeckName] = useState('');
+  const [qcmGenSaving, setQcmGenSaving] = useState(false);
+  const [libraryCategory, setLibraryCategory] = useState('all');
   const qcmGenInputRef = useRef(null);
   const [flashcardFileName, setFlashcardFileName] = useState('');
   const [flashcardCount, setFlashcardCount] = useState(24);
@@ -594,6 +598,13 @@ export default function App() {
 
   const clearBackgroundTask = (key) => {
     setBackgroundTasks(prev => prev.filter(t => t.key !== key));
+  };
+
+  const closeVerifierCompletely = () => {
+    setVerifierOpen(false);
+    setVerifierMessages([]);
+    setVerifierPending(false);
+    setVerifierError(null);
   };
 
   const notifyBackgroundTask = (label, status = 'done') => {
@@ -1734,6 +1745,12 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
     setMode('flashcards');
   };
 
+  const qcmCategoryLabel = (value) => ({
+    externat: 'Externat',
+    difficile: 'Difficile / piegeux',
+    rattrapage: 'Rattrapage rapide',
+  }[value] || value || 'Non classe');
+
   const generateQcmDeckFromPdf = async (file) => {
     if (!file) return;
     if (!/\.pdf$/i.test(file.name)) { setQcmGenError('PDF requis.'); return; }
@@ -1742,6 +1759,7 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
     setQcmGenFileName(file.name);
     setQcmGenProcessing(true);
     setQcmGenSaved(false);
+    setQcmGenDraft(null);
     const taskKey = `qcmgen-${Date.now()}`;
     pushBackgroundTask({ key: taskKey, label: 'Generation QCM', detail: file.name, targetMode: 'extract' });
     try {
@@ -1762,7 +1780,15 @@ Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
     }
   ]
 }
-Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possibles, formulations type examen, pas de QROC, pas d'informations non deductibles du cours. Varie les themes, evite les doublons.`;
+Contraintes :
+- FRANCAIS UNIQUEMENT. Aucun mot anglais sauf sigle medical consacre.
+- 5 options A-E par question.
+- Une ou plusieurs bonnes reponses possibles.
+- Formulations type examen.
+- Pas de QROC.
+- Pas d'informations non deductibles du cours.
+- Varie les themes, evite les doublons.
+- Titre du deck en francais clair.`;
       const parsedBatches = [];
       for (let batch = 0; batch < batches; batch++) {
         const remaining = wantedCount - (batch * batchSize);
@@ -1803,20 +1829,26 @@ Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possi
         hasNoCorrect: !(q.options || []).some(o => o.correct),
         generatedByAI: true,
         sourceName: file.name,
+        generatedLevel: qcmGenLevel,
+        generatedCategory: qcmCategoryLabel(qcmGenLevel),
       })).filter(q => q.options.length >= 2);
       if (!generated.length) throw new Error('Aucun QCM exploitable renvoye par l\'IA.');
+      const deckName = `IA - ${title}`;
+      setQcmGenDeckName(deckName);
+      setQcmGenDraft({
+        title,
+        name: deckName,
+        sourceName: file.name,
+        level: qcmGenLevel,
+        questions: generated,
+        generatedAt: new Date().toISOString(),
+      });
       setQuestions(generated);
       setPages([]);
       setResults([]);
       setFilename(title);
       setCurrentDeckId(null);
-      if (session) {
-        const deck = await saveDeck(`IA - ${title}`, generated);
-        setCurrentDeckId(deck.id);
-        setDecks(d => [{ id: deck.id, name: deck.name, created_at: deck.created_at, questions: generated }, ...d]);
-        setQcmGenSaved(true);
-      }
-      if (modeRef.current === 'qcmgen') setMode('extract');
+      if (modeRef.current !== 'qcmgen') setMode('qcmgen');
       finishBackgroundTask(taskKey, { status: 'done', label: 'Generation QCM', targetMode: 'extract' });
       notifyBackgroundTask('Generation QCM');
     } catch (e) {
@@ -2988,6 +3020,34 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
     finally { setSavingDeck(false); }
   };
 
+  const saveGeneratedQcmDeck = async () => {
+    if (!qcmGenDraft?.questions?.length) return;
+    if (!session) { setShowAuth(true); return; }
+    setQcmGenSaving(true);
+    setQcmGenError(null);
+    try {
+      const name = (qcmGenDeckName || qcmGenDraft.name || `IA - ${qcmGenDraft.title}`).trim();
+      const questionsToSave = qcmGenDraft.questions.map(q => ({
+        ...q,
+        generatedDeckName: name,
+        generatedCategory: q.generatedCategory || qcmCategoryLabel(qcmGenDraft.level),
+      }));
+      const deck = await saveDeck(name, questionsToSave);
+      setCurrentDeckId(deck.id);
+      setDecks(d => [{ id: deck.id, name, created_at: deck.created_at, questions: questionsToSave }, ...d]);
+      setQcmGenDraft(d => d ? { ...d, questions: questionsToSave, name } : d);
+      setQuestions(questionsToSave);
+      setFilename(name);
+      setQcmGenSaved(true);
+      toast('Deck QCM sauvegarde', 'success');
+    } catch (e) {
+      setQcmGenError('Sauvegarde impossible : ' + e.message);
+      toast('Sauvegarde impossible', 'error');
+    } finally {
+      setQcmGenSaving(false);
+    }
+  };
+
   const loadDeck = (deck) => {
     setQuestions(deck.questions || []);
     setFilename(deck.name);
@@ -3056,6 +3116,9 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
   const studySheetRows = useMemo(() => studySheets.filter(s => s.data?.kind !== 'flashcards'), [studySheets]);
   const flashcardRows = useMemo(() => studySheets.filter(s => s.data?.kind === 'flashcards'), [studySheets]);
   const currentFlashcard = flashcardSet?.cards?.[flashcardStudyIdx] || null;
+  const deckCategory = (deck) => (deck.questions || []).find(q => q.generatedCategory)?.generatedCategory || ((deck.name || '').startsWith('IA -') ? 'Genere IA' : 'Classique');
+  const libraryCategories = useMemo(() => Array.from(new Set(decks.map(deckCategory))).sort((a, b) => a.localeCompare(b, 'fr')), [decks]);
+  const visibleDecks = useMemo(() => decks.filter(d => libraryCategory === 'all' ? true : deckCategory(d) === libraryCategory), [decks, libraryCategory]);
   const activeBackgroundTask = backgroundTasks.find(t => t.status === 'running') || backgroundTasks[0] || null;
   const runningBackgroundCount = backgroundTasks.filter(t => t.status === 'running').length;
 
@@ -4150,9 +4213,14 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   <div className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>Verificateur QCM</div>
                   <div className="text-sm" style={{ fontWeight: 600 }}>IA medicale sourcee</div>
                 </div>
-                <button onClick={() => setVerifierOpen(false)} className="btn-secondary px-2 py-1 text-xs" aria-label="Fermer le verificateur">
-                  <IconX size={14} />
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setVerifierOpen(false)} className="btn-secondary px-2 py-1 text-xs" aria-label="Replier le verificateur">
+                    _
+                  </button>
+                  <button onClick={closeVerifierCompletely} className="btn-secondary px-2 py-1 text-xs" aria-label="Fermer totalement le verificateur">
+                    <IconX size={14} />
+                  </button>
+                </div>
               </div>
               <div className="p-4 scrollbar" style={{ maxHeight: 'min(520px, 65vh)', overflowY: 'auto' }}>
                 {verifierMessages.map((msg, i) => (
@@ -4584,6 +4652,44 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 </div>
               </div>
             </div>
+            {qcmGenDraft && (
+              <section className="surface p-5 mt-6">
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                  <div>
+                    <Eyebrow accent>Deck genere</Eyebrow>
+                    <div className="display mt-3" style={{ fontSize: 'clamp(22px, 3vw, 34px)', fontWeight: 600 }}>{qcmGenDraft.title}</div>
+                    <div className="mono text-[10px] mt-2" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                      {qcmGenDraft.questions.length} QCM · {qcmCategoryLabel(qcmGenDraft.level)} · {qcmGenDraft.sourceName}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => { setMode('extract'); }} className="btn-primary px-4 py-2 text-sm">Consulter</button>
+                    <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Quiz</button>
+                  </div>
+                </div>
+                <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-ink-mute)' }}>Nom du deck</label>
+                <div className="flex flex-col sm:flex-row gap-2 mb-5">
+                  <input value={qcmGenDeckName} onChange={e => setQcmGenDeckName(e.target.value)} className="input-field flex-1" />
+                  <button onClick={saveGeneratedQcmDeck} disabled={qcmGenSaving || qcmGenSaved} className="btn-primary px-4 py-2 text-sm">
+                    {qcmGenSaved ? 'Sauvegarde' : qcmGenSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+                  </button>
+                </div>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {qcmGenDraft.questions.slice(0, 6).map((q, idx) => (
+                    <div key={q.id || idx} className="p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
+                      <div className="mono text-[10px] mb-2" style={{ color: 'var(--c-accent)', letterSpacing: '0.12em' }}>QCM {idx + 1}</div>
+                      <div className="text-sm" style={{ fontWeight: 600, lineHeight: 1.45 }}>{q.enonce}</div>
+                      <div className="text-xs mt-3" style={{ color: 'var(--c-ink-soft)' }}>
+                        {(q.options || []).map(o => `${o.letter}${o.correct ? '*' : ''}`).join(' · ')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {qcmGenDraft.questions.length > 6 && (
+                  <p className="text-xs mt-3" style={{ color: 'var(--c-ink-mute)' }}>Apercu limite aux 6 premieres questions. Clique sur Consulter pour tout relire.</p>
+                )}
+              </section>
+            )}
           </>
         )}
 
@@ -5257,9 +5363,15 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   </Reveal>
                 </div>
                 <Reveal delay={120}>
-                  <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
-                    <IconStar size={14} filled /> Quiz favoris
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
+                      <IconStar size={14} filled /> Quiz favoris
+                    </button>
+                    <select value={libraryCategory} onChange={e => setLibraryCategory(e.target.value)} className="input-field text-sm" style={{ minWidth: 190 }}>
+                      <option value="all">Toutes categories</option>
+                      {libraryCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
                 </Reveal>
               </div>
             </section>
@@ -5275,11 +5387,19 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   </p>
                 </div>
               </Reveal>
+            ) : visibleDecks.length === 0 ? (
+              <Reveal>
+                <div className="text-center py-16" style={{ color: 'var(--c-ink-mute)' }}>
+                  <div className="mono text-[10px] mb-3" style={{ letterSpacing: '0.22em', textTransform: 'uppercase' }}>Aucun deck dans cette categorie</div>
+                  <p className="text-sm italic" style={{ color: 'var(--c-ink-soft)' }}>Change le filtre ou genere un nouveau deck.</p>
+                </div>
+              </Reveal>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {decks.map((d, idx) => {
+                {visibleDecks.map((d, idx) => {
                   const qs = d.questions || [];
                   const favCount = qs.filter(q => q.favorite).length;
+                  const category = deckCategory(d);
                   const num = String(idx + 1).padStart(2, '0');
                   const hue = (() => {
                     const s = String(d.id || d.name || '');
@@ -5296,6 +5416,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                         </span>
                       </div>
                       <div className="display text-base mb-3" style={{ fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.01em' }}>{d.name}</div>
+                      <span className="badge badge--accent mb-3">{category}</span>
                       <div className="mono text-[10px] mb-4" style={{ color: 'var(--c-ink-soft)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
                         {qs.length} Q · {qs.filter(q => q.type === 'qcm').length} QCM · {qs.filter(q => q.type === 'qroc').length} QROC
                         {favCount > 0 && <span style={{ color: '#c4a84d', marginLeft: 6 }}>★ {favCount}</span>}
