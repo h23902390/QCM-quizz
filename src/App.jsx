@@ -2459,7 +2459,7 @@ Contraintes :
 
   return (
     <div className="min-h-screen w-full" style={{
-      background: '#f6f3ec', color: '#1a1a1a',
+      background: '#ffffff', color: '#202124',
       fontFamily: "'Public Sans', system-ui, sans-serif",
       position: 'relative',
     }}>
@@ -2477,15 +2477,15 @@ Contraintes :
           --d-slow: 380ms;
 
           /* Couleurs (hierarchisees) */
-          --c-bg:        #f6f3ec;
-          --c-surface:   #ffffff;
-          --c-ink:       #1a1a1a;
-          --c-ink-soft:  #5a5a5a;
-          --c-ink-mute:  #8a8a8a;
-          --c-line:      #d6d0c1;
-          --c-line-soft: #ebe5d4;
-          --c-accent:    #b54125;
-          --c-accent-soft: #f5d9d0;
+          --c-bg:        #ffffff;
+          --c-surface:   #f8f9fa;
+          --c-ink:       #202124;
+          --c-ink-soft:  #5f6368;
+          --c-ink-mute:  #80868b;
+          --c-line:      #dadce0;
+          --c-line-soft: #e8eaed;
+          --c-accent:    #1a6fd4;
+          --c-accent-soft: #e8f0fe;
 
           /* Radius unifie */
           --r-xs: 3px;
@@ -2502,8 +2502,8 @@ Contraintes :
         .display { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; letter-spacing: -0.02em; }
         .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
         .scrollbar::-webkit-scrollbar { width: 8px; }
-        .scrollbar::-webkit-scrollbar-thumb { background: #d6d0c1; border-radius: 4px; transition: background var(--d-fast) var(--ease-out-quart); }
-        .scrollbar::-webkit-scrollbar-thumb:hover { background: #b8b09c; }
+        .scrollbar::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 4px; transition: background var(--d-fast) var(--ease-out-quart); }
+        .scrollbar::-webkit-scrollbar-thumb:hover { background: #bdc1c6; }
 
         /* ---------- Focus ring global (accessibilite) ---------- */
         *:focus-visible {
@@ -2526,7 +2526,7 @@ Contraintes :
         .btn-primary:hover:not(:disabled) {
           background: var(--c-accent);
           transform: translateY(-1px);
-          box-shadow: 0 6px 16px -4px rgba(181,65,37,0.32);
+          box-shadow: 0 6px 16px -4px rgba(26,111,212,0.32);
         }
         .btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); transition-duration: 80ms; }
         .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
@@ -2567,7 +2567,7 @@ Contraintes :
                       box-shadow var(--d-fast) var(--ease-out-quart);
           font-family: inherit; font-size: 14px;
         }
-        .input-field:focus { border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(181,65,37,0.14); }
+        .input-field:focus { border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(26,111,212,0.14); }
         .input-field:focus-visible { outline: none; }
 
         /* ---------- Toggle iOS-style ---------- */
@@ -2578,7 +2578,7 @@ Contraintes :
         .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
         .switch .slider {
           position: absolute; cursor: pointer; inset: 0;
-          background: #d6d0c1; border-radius: 999px;
+          background: #dadce0; border-radius: 999px;
           transition: background var(--d-base) var(--ease-out-quart);
         }
         .switch .slider::before {
@@ -2590,7 +2590,7 @@ Contraintes :
         }
         .switch input:checked + .slider { background: var(--c-accent); }
         .switch input:checked + .slider::before { transform: translateX(16px); }
-        .switch input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(181,65,37,0.3); }
+        .switch input:focus-visible + .slider { box-shadow: 0 0 0 3px rgba(26,111,212,0.3); }
 
         /* ---------- QCM options ---------- */
         .qcm-option {
@@ -2603,11 +2603,11 @@ Contraintes :
                       box-shadow var(--d-fast) var(--ease-out-quart),
                       transform var(--d-fast) var(--ease-out-quart);
         }
-        .qcm-option:hover { background: #faf7ee; border-color: #c4bca8; transform: translateX(2px); box-shadow: var(--shadow-rest); }
+        .qcm-option:hover { background: #f6f8ff; border-color: #bdc1c6; transform: translateX(2px); box-shadow: var(--shadow-rest); }
         .qcm-option:active { transform: translateX(2px) scale(0.995); transition-duration: 80ms; }
         .qcm-option.selected { background: var(--c-ink); color: var(--c-bg); border-color: var(--c-ink); box-shadow: var(--shadow-card); }
         .qcm-option.correct { background: #e6f3e0; border-color: #6b9d4d; color: #2d5a1a; animation: optionFlashGreen 600ms var(--ease-out-quart); }
-        .qcm-option.incorrect-selected { background: #f8e0d6; border-color: #b54125; color: #6b1f0a; animation: optionShake 360ms var(--ease-out-quart); }
+        .qcm-option.incorrect-selected { background: #fce8e6; border-color: #d93025; color: #c5221f; animation: optionShake 360ms var(--ease-out-quart); }
         .qcm-option.missed { background: #fff8e0; border-color: #c4a84d; color: #5a4a10; }
 
         /* ---------- Surface (cartes par defaut) ---------- */
@@ -2628,7 +2628,7 @@ Contraintes :
           font-size: 10px; letter-spacing: 0.04em;
           border: 1px solid;
         }
-        .pill-qcm  { background: rgba(181,65,37,0.08); color: var(--c-accent); border-color: rgba(181,65,37,0.22); }
+        .pill-qcm  { background: rgba(26,111,212,0.08); color: var(--c-accent); border-color: rgba(26,111,212,0.22); }
         .pill-qroc { background: rgba(26,26,26,0.06);  color: var(--c-ink);    border-color: rgba(26,26,26,0.18); }
 
         /* ---------- Keyframes ---------- */
@@ -2661,8 +2661,8 @@ Contraintes :
           100% { background: #e6f3e0; }
         }
         @keyframes timerPulse {
-          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(181,65,37,0); }
-          50%      { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(181,65,37,0.08); }
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(26,111,212,0); }
+          50%      { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(26,111,212,0.08); }
         }
         @keyframes recPulse {
           0%, 100% { transform: scale(1); opacity: 1; }
@@ -2725,7 +2725,7 @@ Contraintes :
                       box-shadow var(--d-base) var(--ease-out-quart),
                       border-color var(--d-base) var(--ease-out-quart);
         }
-        .card-hover:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: #c4bca8; }
+        .card-hover:hover { transform: translateY(-3px); box-shadow: var(--shadow-lift); border-color: #bdc1c6; }
 
         .drop-zone {
           border-radius: var(--r-md);
@@ -2734,8 +2734,8 @@ Contraintes :
                       box-shadow var(--d-base) var(--ease-out-quart),
                       transform var(--d-base) var(--ease-out-quart);
         }
-        .drop-zone:hover:not(.drop-zone--over) { border-color: #8a8273; background: rgba(255,255,255,0.4); }
-        .drop-zone--over { transform: scale(1.01); box-shadow: 0 12px 36px -16px rgba(181,65,37,0.32); }
+        .drop-zone:hover:not(.drop-zone--over) { border-color: #80868b; background: rgba(255,255,255,0.4); }
+        .drop-zone--over { transform: scale(1.01); box-shadow: 0 12px 36px -16px rgba(26,111,212,0.32); }
 
         /* ---------- Nav tabs avec indicateur slide ---------- */
         .tab-bar {
@@ -2803,15 +2803,15 @@ Contraintes :
         .eyebrow::before {
           content: ''; width: 6px; height: 6px; border-radius: 50%;
           background: var(--c-accent);
-          box-shadow: 0 0 0 2px rgba(181,65,37,0.16);
+          box-shadow: 0 0 0 2px rgba(26,111,212,0.16);
         }
-        .eyebrow--accent { color: var(--c-accent); border-color: rgba(181,65,37,0.28); }
+        .eyebrow--accent { color: var(--c-accent); border-color: rgba(26,111,212,0.28); }
 
         /* ---------- Premium : double-bezel (carte dans une carte) ---------- */
         .bezel {
           padding: 6px;
-          background: linear-gradient(180deg, #efeadc 0%, #e6dfc8 100%);
-          border: 1px solid #d6d0c1;
+          background: linear-gradient(180deg, #e8f0fe 0%, #dadce0 100%);
+          border: 1px solid #dadce0;
           border-radius: calc(var(--r-md) + 6px);
           box-shadow: var(--shadow-card);
           transition: box-shadow var(--d-base) var(--ease-out-quart),
@@ -2826,10 +2826,10 @@ Contraintes :
         }
         .bezel-dropzone .bezel-inner {
           background: rgba(255,255,255,0.55);
-          border: 1px dashed #b8b09c;
+          border: 1px dashed #bdc1c6;
         }
-        .bezel-dropzone:hover .bezel-inner { background: rgba(255,255,255,0.8); border-color: #8a8273; }
-        .bezel-dropzone--over .bezel-inner { background: #ece7d8; border-color: var(--c-accent); border-style: solid; }
+        .bezel-dropzone:hover .bezel-inner { background: rgba(255,255,255,0.8); border-color: #80868b; }
+        .bezel-dropzone--over .bezel-inner { background: #e8f0fe; border-color: var(--c-accent); border-style: solid; }
 
         /* ---------- Premium : CTA orbit (button-in-button arrow) ---------- */
         .cta-orbit {
@@ -2842,7 +2842,7 @@ Contraintes :
                       transform var(--d-base) var(--ease-out-quart),
                       box-shadow var(--d-base) var(--ease-out-quart);
         }
-        .cta-orbit:hover { background: var(--c-accent); transform: translateY(-1px); box-shadow: 0 12px 28px -10px rgba(181,65,37,0.45); }
+        .cta-orbit:hover { background: var(--c-accent); transform: translateY(-1px); box-shadow: 0 12px 28px -10px rgba(26,111,212,0.45); }
         .cta-orbit:active { transform: translateY(0) scale(0.98); }
         .cta-orbit .orbit-icon {
           display: inline-flex; align-items: center; justify-content: center;
@@ -2920,7 +2920,7 @@ Contraintes :
         }
       `}</style>
 
-      <header className="border-b" style={{ borderColor: '#d6d0c1', position: 'relative', zIndex: 2, background: '#f6f3ec' }}>
+      <header className="border-b" style={{ borderColor: '#dadce0', position: 'relative', zIndex: 2, background: '#ffffff' }}>
         <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && setMode('home')}>
             <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>MedOutils</h1>
@@ -2949,7 +2949,7 @@ Contraintes :
       </header>
 
       {/* Barre de menu — bascule entre les outils */}
-      <nav className="border-b" style={{ borderColor: '#d6d0c1', background: '#f6f3ec', position: 'relative', zIndex: 2 }}>
+      <nav className="border-b" style={{ borderColor: '#dadce0', background: '#ffffff', position: 'relative', zIndex: 2 }}>
         <TabBar
           tabs={[
             { key: 'home', label: 'Accueil' },
@@ -2997,7 +2997,7 @@ Contraintes :
               {authIsSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
             {!supabaseEnabled && (
-              <p className="text-xs mb-4" style={{ color: '#b54125' }}>
+              <p className="text-xs mb-4" style={{ color: '#d93025' }}>
                 Supabase n'est pas configuré. Définis VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY puis exécute supabase-schema.sql.
               </p>
             )}
@@ -3006,7 +3006,7 @@ Contraintes :
             <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && submitAuth()}
               placeholder="Mot de passe (min. 6 caractères)" className="input-field w-full mb-3" />
-            {authError && <p className="text-xs mb-3" style={{ color: '#b54125' }}>{authError}</p>}
+            {authError && <p className="text-xs mb-3" style={{ color: '#d93025' }}>{authError}</p>}
             <div className="flex justify-between items-center">
               <button onClick={() => { setAuthIsSignup(!authIsSignup); setAuthError(null); }}
                 className="text-xs underline" style={{ color: '#5a5a5a' }}>
@@ -3101,7 +3101,7 @@ Contraintes :
         </div>
       )}
       {libsError && (
-        <div className="max-w-7xl mx-auto px-6 py-3 text-xs mono" style={{ color: '#b54125' }}>
+        <div className="max-w-7xl mx-auto px-6 py-3 text-xs mono" style={{ color: '#d93025' }}>
           Erreur de chargement des bibliothèques : {libsError}
         </div>
       )}
@@ -3280,7 +3280,7 @@ Contraintes :
                       </div>
                       <div className="space-y-4">
                         {sheetResult.miniAlgorithm?.length > 0 && <div className="p-4" style={{ background: '#e6f3e0', border: '1px solid #9ec28f', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">ALGORITHME</div>{sheetResult.miniAlgorithm.map((x, i) => <div key={i} className="text-sm mb-2">{i + 1}. {x}</div>)}</div>}
-                        {sheetResult.redFlags?.length > 0 && <div className="p-4" style={{ background: '#f8e0d6', border: '1px solid #dfa493', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">SIGNES DE GRAVITE</div>{sheetResult.redFlags.map((x, i) => <div key={i} className="text-sm mb-2">- {x}</div>)}</div>}
+                        {sheetResult.redFlags?.length > 0 && <div className="p-4" style={{ background: '#fce8e6', border: '1px solid #f28b82', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">SIGNES DE GRAVITE</div>{sheetResult.redFlags.map((x, i) => <div key={i} className="text-sm mb-2">- {x}</div>)}</div>}
                         {sheetResult.examTraps?.length > 0 && <div className="p-4" style={{ background: '#fff8e0', border: '1px solid #c4a84d', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">PIEGES QCM</div>{sheetResult.examTraps.map((x, i) => <div key={i} className="text-sm mb-2">- {x}</div>)}</div>}
                         {sheetResult.keywords?.length > 0 && <div className="flex flex-wrap gap-2">{sheetResult.keywords.map((k, i) => <span key={i} className="pill pill-qroc">{k}</span>)}</div>}
                       </div>
@@ -3648,13 +3648,13 @@ Contraintes :
                   const mm = String(Math.floor(ecosTimeLeft / 60)).padStart(2, '0');
                   const ss = String(ecosTimeLeft % 60).padStart(2, '0');
                   let color = '#1a1a1a';
-                  if (ecosTimeLeft <= 30) color = '#b54125';
+                  if (ecosTimeLeft <= 30) color = '#d93025';
                   else if (ecosTimeLeft <= 120) color = '#d97706';
                   return (
                     <div className="flex items-center gap-2">
                       <div className={`mono text-xl px-3 py-1 ${ecosTimerRunning && ecosTimeLeft <= 30 ? 'timer-pulse' : ''}`} style={{
                         color, fontWeight: 600,
-                        background: '#fff', border: '1px solid #d6d0c1',
+                        background: '#fff', border: '1px solid #dadce0',
                         minWidth: 90, textAlign: 'center',
                       }}>{mm}:{ss}</div>
                       <button
@@ -3738,7 +3738,7 @@ Contraintes :
 
                 <div className="border-t p-4" style={{ borderColor: 'var(--c-line)' }}>
                   {ecosError && (
-                    <div className="text-xs mb-2" style={{ color: '#b54125' }}>{ecosError}</div>
+                    <div className="text-xs mb-2" style={{ color: '#d93025' }}>{ecosError}</div>
                   )}
                   {ecosTranscribing && (
                     <div className="text-xs mb-2 mono" style={{ color: '#5a5a5a' }}>Transcription en cours…</div>
@@ -3769,7 +3769,7 @@ Contraintes :
                       title={ecosRecording ? 'Arrêter la dictée' : (ecosInput.trim() ? 'Envoyer' : 'Dicter (Whisper)')}
                       className={ecosRecording ? 'px-3 py-2 text-sm' : (ecosInput.trim() ? 'btn-primary px-3 py-2 text-sm' : 'btn-secondary px-3 py-2 text-sm')}
                       style={ecosRecording ? {
-                        background: '#b54125', color: '#fff', border: '1px solid #b54125',
+                        background: '#d93025', color: '#fff', border: '1px solid #d93025',
                         borderRadius: 'var(--r-sm)', display: 'inline-flex', alignItems: 'center', gap: 6,
                       } : undefined}
                     >
@@ -3781,8 +3781,8 @@ Contraintes :
                     </button>
                   </div>
                   {ecosRecording && (
-                    <div className="text-xs mt-2 mono flex items-center gap-2" style={{ color: '#b54125' }}>
-                      <span className="rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#b54125' }} />
+                    <div className="text-xs mt-2 mono flex items-center gap-2" style={{ color: '#d93025' }}>
+                      <span className="rec-dot" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#d93025' }} />
                       Enregistrement en cours…
                     </div>
                   )}
@@ -3843,7 +3843,7 @@ Contraintes :
             <div className="space-y-4 mt-6 mb-12">
               {Object.entries(ecosScore.bySection).map(([section, s]) => {
                 const pct = s.max > 0 ? (s.obtenu / s.max) * 100 : 0;
-                const color = pct >= 75 ? '#6b9d4d' : pct >= 50 ? '#c4a84d' : '#b54125';
+                const color = pct >= 75 ? '#34a853' : pct >= 50 ? '#f9ab00' : '#d93025';
                 return (
                   <div key={section}>
                     <div className="flex justify-between items-baseline text-sm mb-2">
@@ -3879,9 +3879,9 @@ Contraintes :
                 </div>
               )}
               {Array.isArray(ecosEvaluation.axesAmelioration) && ecosEvaluation.axesAmelioration.length > 0 && (
-                <div className="p-5" style={{ background: '#f8e0d6', border: '1px solid #dfa493', borderRadius: 'var(--r-md)' }}>
-                  <div className="mono text-[10px] mb-3" style={{ color: '#6b1f0a', letterSpacing: '0.22em', textTransform: 'uppercase' }}>● Axes d'amélioration</div>
-                  <ul className="text-sm space-y-1.5" style={{ color: '#6b1f0a', lineHeight: 1.5 }}>
+                <div className="p-5" style={{ background: '#fce8e6', border: '1px solid #f28b82', borderRadius: 'var(--r-md)' }}>
+                  <div className="mono text-[10px] mb-3" style={{ color: '#c5221f', letterSpacing: '0.22em', textTransform: 'uppercase' }}>● Axes d'amélioration</div>
+                  <ul className="text-sm space-y-1.5" style={{ color: '#c5221f', lineHeight: 1.5 }}>
                     {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>— {p}</li>)}
                   </ul>
                 </div>
@@ -3900,7 +3900,7 @@ Contraintes :
                   ? { label: 'OK', color: '#2d5a1a', bg: '#e6f3e0', border: '#9ec28f' }
                   : ratio >= 0.5
                     ? { label: 'PART.', color: '#5a4a10', bg: '#fff8e0', border: '#c4a84d' }
-                    : { label: 'KO', color: '#6b1f0a', bg: '#f8e0d6', border: '#dfa493' };
+                    : { label: 'KO', color: '#c5221f', bg: '#fce8e6', border: '#f28b82' };
                 return (
                   <div key={i} className="p-4" style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
                     <div className="flex items-center justify-between gap-3 mb-1">
@@ -4094,7 +4094,7 @@ Contraintes :
             <div className="space-y-4">
               {questions.map((q, idx) => (
                 <div key={q.id} className="p-5" style={{
-                  border: `1px solid ${(q.hasNoCorrect || q.hasNoAnswer) ? 'rgba(181,65,37,0.4)' : 'var(--c-line)'}`,
+                  border: `1px solid ${(q.hasNoCorrect || q.hasNoAnswer) ? 'rgba(217,48,37,0.4)' : 'var(--c-line)'}`,
                   background: 'var(--c-surface)',
                   borderRadius: 'var(--r-md)',
                 }}>
@@ -4104,7 +4104,7 @@ Contraintes :
                     <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>P.{q.pageNum}</span>
                     {q.detectionError && <span className="mono text-[10px] flex items-center gap-1" style={{ color: 'var(--c-accent)', letterSpacing: '0.12em' }}><IconWarning size={11} /> DÉTECTION ÉCHOUÉE</span>}
                     {(q.hasNoCorrect || q.hasNoAnswer) && (
-                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#f8e0d6', color: '#6b1f0a', border: '1px solid #dfa493', letterSpacing: '0.12em' }}>SANS RÉPONSE</span>
+                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#fce8e6', color: '#c5221f', border: '1px solid #f28b82', letterSpacing: '0.12em' }}>SANS RÉPONSE</span>
                     )}
                     <button onClick={() => toggleFavorite(q.id)} className="ml-auto star-btn p-1 -m-1" title="Favori" aria-label="Favori">
                       <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>
@@ -4127,7 +4127,7 @@ Contraintes :
                         Voir la page d'origine (figures, schémas)
                       </summary>
                       <img src={q.imageDataUrl} alt={`Page ${q.pageNum}`}
-                        className="mt-2 max-w-full border" style={{ borderColor: '#d6d0c1' }} />
+                        className="mt-2 max-w-full border" style={{ borderColor: '#dadce0' }} />
                     </details>
                   )}
 
@@ -4233,7 +4233,7 @@ Contraintes :
                       Voir la page d'origine (figures, schémas)
                     </summary>
                     <img src={q.imageDataUrl} alt={`Page ${q.pageNum}`}
-                      className="mt-2 max-w-full border" style={{ borderColor: '#d6d0c1' }} />
+                      className="mt-2 max-w-full border" style={{ borderColor: '#dadce0' }} />
                   </details>
                 )}
 
@@ -4287,13 +4287,13 @@ Contraintes :
 
                 {feedback && (
                   <div className="p-4 mb-6 feedback-card" style={{
-                    background: feedback.verdict === 'correct' ? '#e6f3e0'
-                              : feedback.verdict === 'partiel' ? '#fff8e0'
-                              : '#f8e0d6',
-                    color: feedback.verdict === 'correct' ? '#2d5a1a'
-                         : feedback.verdict === 'partiel' ? '#5a4a10'
-                         : '#6b1f0a',
-                    borderLeft: `3px solid ${feedback.verdict === 'correct' ? '#6b9d4d' : feedback.verdict === 'partiel' ? '#c4a84d' : '#b54125'}`,
+                    background: feedback.verdict === 'correct' ? '#e6f4ea'
+                              : feedback.verdict === 'partiel' ? '#fef9e5'
+                              : '#fce8e6',
+                    color: feedback.verdict === 'correct' ? '#137333'
+                         : feedback.verdict === 'partiel' ? '#7a4f00'
+                         : '#c5221f',
+                    borderLeft: `3px solid ${feedback.verdict === 'correct' ? '#34a853' : feedback.verdict === 'partiel' ? '#f9ab00' : '#d93025'}`,
                   }}>
                     <div className="flex items-baseline justify-between mb-1">
                       <strong style={{ fontSize: 14 }}>
@@ -4382,10 +4382,10 @@ Contraintes :
               {results.map((r, i) => {
                 const v = r.feedback?.verdict;
                 const verdictMeta = v === 'correct'
-                  ? { label: 'CORRECT', color: '#2d5a1a', bg: '#e6f3e0', border: '#9ec28f' }
+                  ? { label: 'CORRECT', color: '#137333', bg: '#e6f4ea', border: '#81c995' }
                   : v === 'partiel'
-                    ? { label: 'PARTIEL', color: '#5a4a10', bg: '#fff8e0', border: '#c4a84d' }
-                    : { label: 'INCORRECT', color: '#6b1f0a', bg: '#f8e0d6', border: '#dfa493' };
+                    ? { label: 'PARTIEL', color: '#7a4f00', bg: '#fef9e5', border: '#f9ab00' }
+                    : { label: 'INCORRECT', color: '#c5221f', bg: '#fce8e6', border: '#f28b82' };
                 return (
                   <div key={i} className="p-5" style={{
                     background: 'var(--c-surface)', border: '1px solid var(--c-line)',
@@ -4487,13 +4487,13 @@ Contraintes :
           <div className="section-divider" style={{ margin: 'clamp(16px, 2.5vw, 28px) 0 clamp(28px, 3vw, 40px)' }} />
 
           {!apiKey && (
-            <div className="mb-5 p-4 text-sm flex items-start gap-3" style={{ background: '#fdf3ee', borderLeft: '3px solid var(--c-accent)', color: '#6b1f0a', borderRadius: 'var(--r-sm, 4px)' }}>
+            <div className="mb-5 p-4 text-sm flex items-start gap-3" style={{ background: '#fce8e6', borderLeft: '3px solid #d93025', color: '#c5221f', borderRadius: 'var(--r-sm, 4px)' }}>
               <span className="mono text-[10px]" style={{ letterSpacing: '0.14em' }}>CLÉ API REQUISE</span>
               <span>Configure ta clé OpenAI dans les Réglages pour utiliser cet outil.</span>
             </div>
           )}
           {entError && (
-            <div className="mb-5 p-4 text-sm" style={{ background: '#fdf3ee', borderLeft: '3px solid var(--c-accent)', color: '#6b1f0a', borderRadius: 'var(--r-sm, 4px)' }}>
+            <div className="mb-5 p-4 text-sm" style={{ background: '#fce8e6', borderLeft: '3px solid #d93025', color: '#c5221f', borderRadius: 'var(--r-sm, 4px)' }}>
               {entError}
             </div>
           )}
@@ -4892,14 +4892,14 @@ Contraintes :
             width: '100%',
             height: 'calc(100vh - 130px)',
             border: 'none',
-            background: '#f6f3ec',
+            background: '#ffffff',
             display: 'block',
           }}
         />
       )}
 
       {mode !== 'analyse' && mode !== 'entretien' && (
-        <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
+        <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#80868b', borderColor: '#dadce0' }}>
           Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
           Les PDF ne sont jamais stockes ; pour les outils IA, seul le texte extrait est envoye a OpenAI.
         </footer>
