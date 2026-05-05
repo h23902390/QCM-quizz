@@ -273,6 +273,24 @@ const cleanMarkdownNoise = (s = '') => s
   .replace(/`{1,3}/g, '')
   .replace(/\*\*/g, '');
 
+const parseJsonLoose = (raw, label = 'JSON') => {
+  const original = String(raw || '').trim();
+  const candidates = [];
+  const unfenced = original.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  candidates.push(unfenced);
+  const firstBrace = unfenced.indexOf('{');
+  const lastBrace = unfenced.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(unfenced.slice(firstBrace, lastBrace + 1));
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch {}
+    const repaired = candidate
+      .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:/g, '$1"$2":')
+      .replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(repaired); } catch {}
+  }
+  throw new Error(`${label} invalide ou incomplet renvoye par l'IA.`);
+};
+
 const ECOS_ATTEMPTS_LOCAL_KEY = 'ecos_attempts_local';
 const APP_MODE_STORAGE_KEY = 'medoutils_last_mode';
 const RESTORABLE_MODES = new Set(['home', 'qcm', 'synthese', 'flashcards', 'qcmgen', 'ecos', 'analyse', 'entretien', 'library']);
@@ -1889,7 +1907,21 @@ Contraintes :
         temperature: 0.2,
       });
     const raw = data.choices?.[0]?.message?.content || '{}';
-    const parsed = JSON.parse(raw);
+    let parsed;
+    try {
+      parsed = parseJsonLoose(raw, 'ECOS JSON');
+    } catch (firstError) {
+      const repair = await chatCompletion('ecos', {
+        messages: [
+          { role: 'system', content: 'Tu repares une reponse JSON ECOS invalide. Renvoie UNIQUEMENT un objet JSON valide, sans markdown, sans commentaire. Toutes les cles doivent etre entre guillemets doubles. Pas de virgule finale.' },
+          { role: 'user', content: `JSON invalide ou tronque a reparer :\n${raw.slice(0, 30000)}\n\nFormat attendu : {"id":"...","titre":"...","specialite":"...","duree":8,"consigneCandidat":"...","briefPatient":"...","grilleCorrection":[{"section":"...","critere":"...","points":1}]}` },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+        max_tokens: 5000,
+      });
+      parsed = parseJsonLoose(repair.choices?.[0]?.message?.content || '{}', 'ECOS JSON repare');
+    }
     // Normalise
     if (!parsed.id) parsed.id = 'ecos-imp-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     if (!parsed.duree) parsed.duree = 8;
