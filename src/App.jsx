@@ -214,6 +214,7 @@ const DEFAULT_AI_SERVICE_PROVIDERS = {
   synthese: 'openai',
   flashcards: 'openai',
   qcmgen: 'openai',
+  verifier: 'openai',
   entretien: 'openai',
 };
 const AI_SERVICES = [
@@ -222,6 +223,7 @@ const AI_SERVICES = [
   { key: 'synthese', label: 'Fiches synthese' },
   { key: 'flashcards', label: 'Flashcards' },
   { key: 'qcmgen', label: 'Generateur QCM' },
+  { key: 'verifier', label: 'Verificateur QCM' },
   { key: 'entretien', label: 'Entretien documents' },
 ];
 const normalizeRestorableMode = (mode) => {
@@ -302,13 +304,16 @@ export default function App() {
   const [feedback, setFeedback] = useState(null);
   const [evaluating, setEvaluating] = useState(false);
   const [results, setResults] = useState([]);
+  const [verifierOpen, setVerifierOpen] = useState(false);
+  const [verifierMessages, setVerifierMessages] = useState([]);
+  const [verifierPending, setVerifierPending] = useState(false);
+  const [verifierError, setVerifierError] = useState(null);
 
   // Settings — restaure depuis localStorage à l'init (synchrone)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
   const [nvidiaModel, setNvidiaModel] = useState(() => localStorage.getItem('nvidia_model') || 'z-ai/glm-4.7');
-  const [verifierUrl, setVerifierUrl] = useState(() => localStorage.getItem('verifier_url') || '');
   const [aiServiceProviders, setAiServiceProviders] = useState(() => {
     try {
       return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
@@ -1791,10 +1796,6 @@ Contraintes :
     setNvidiaModel(m);
     try { localStorage.setItem('nvidia_model', m); } catch {}
   };
-  const persistVerifierUrl = (url) => {
-    setVerifierUrl(url);
-    try { localStorage.setItem('verifier_url', url); } catch {}
-  };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
       const next = { ...prev, [service]: provider };
@@ -1837,25 +1838,100 @@ Contraintes :
     try { localStorage.setItem('ocr_mode', v); } catch {}
   };
 
-  const buildVerifierQuery = (question, fb) => [
-    'Verifie cette information medicale a partir de sources fiables et corrige si besoin.',
-    '',
-    `Question : ${question?.enonce || ''}`,
-    `Ma reponse : ${fb?.userValue || ''}`,
-    `Reponse attendue : ${fb?.expected || ''}`,
-    fb?.explanation ? `Correction de l'app : ${fb.explanation}` : '',
-  ].filter(Boolean).join('\n');
+  const verifierSystemPrompt = `Tu es une IA medicale experte en pedagogie pour etudiants en medecine.
+Ta mission est de verifier rapidement une proposition de QCM medical quand un etudiant doute d'un item.
+Reponds comme un tuteur medical rigoureux, oriente EDN/ECN, avec un raisonnement bref, source, et directement utile pour decider si l'item est vrai, faux, discutable ou non verifiable.
+Ne fais pas un cours complet.
 
-  const openVerifier = async (query) => {
-    const base = verifierUrl.trim();
-    if (!base) {
-      alert('Ajoute dans Reglages l URL de la page WordPress qui contient le shortcode [mwai_chatbot id="verificateur"].');
+Format obligatoire :
+## Verification rapide
+
+**Verdict :** ✅ Vrai / ❌ Faux / ⚠️ Discutable / ❓ Non verifiable avec certitude
+
+**Reponse courte :**
+1 a 3 phrases maximum.
+
+**Pourquoi ?**
+Explication medicale concise, orientee QCM, 3 a 6 lignes maximum.
+
+**Point EDN a retenir :**
+Une phrase claire.
+
+**Source fiable :**
+- Organisation ou reference - titre : URL cliquable
+
+**Niveau de preuve / recommandation :**
+Classe et niveau si disponible. Sinon : Non precise dans la source consultee. Ne jamais inventer un grade.
+
+**Fiabilite de la verification :**
+Elevee / Moderee / Faible, avec 1 phrase d'explication.
+
+Sources prioritaires : Colleges des enseignants, HAS, ANSM, Sante publique France, HCSP, INCa, societes savantes francaises ; puis ESC, ACC/AHA, NICE, OMS/WHO, CDC, ECDC, IDSA, KDIGO, EULAR, ERS/ATS, ADA, ACOG, AAP, BSG/ESGE, AASLD/EASL ; puis revues systematiques et essais majeurs.
+Sources interdites : blogs, forums, vulgarisation non institutionnelle, sites commerciaux non academiques, Wikipedia comme source finale, YouTube, reponses d'autres IA.
+Si tu n'es pas certain, dis-le clairement. Si la proposition depend du referentiel EDN, ecris : Pour un QCM francais, il faudrait verifier le College correspondant.
+Si plusieurs sources divergent, explique brievement que pour un QCM francais tu privilegierais le College/HAS.
+Analyse prudemment toujours, jamais, systematique, necessairement, pathognomonique.
+Si la question ressemble a une situation personnelle, reste pedagogique et ajoute : Note : cette verification est pedagogique et ne remplace pas une decision medicale individualisee.`;
+
+  const buildVerifierQuery = (question, fb) => {
+    const options = (question?.options || []).map(o => `${o.letter}. ${o.text}`).join('\n');
+    return [
+      'Tu es en mode VERIFICATEUR QCM ETUDIANT EN MEDECINE.',
+      '',
+      'Verifie rapidement la proposition suivante avec une source fiable cliquable.',
+      '',
+      'Question complete :',
+      question?.enonce || '',
+      options ? `\nOptions :\n${options}` : '',
+      '',
+      'Proposition a verifier :',
+      fb?.userValue || 'incertain',
+      '',
+      'Reponse de l etudiant :',
+      fb?.userValue || 'incertain',
+      '',
+      'Correction donnee par l app :',
+      fb?.expected ? `Reponse attendue : ${fb.expected}` : 'Non precisee',
+      fb?.explanation || '',
+      '',
+      'Specialite / item EDN si connu :',
+      question?.sourceName || question?.pageNum ? `Source : ${question?.sourceName || ''} page ${question?.pageNum || ''}` : 'Non precise',
+      '',
+      'Contraintes : reponse courte, verdict clair, justification 3 a 6 lignes, source fiable cliquable obligatoire, niveau de recommandation/preuve si disponible, signaler les ambiguites, ne pas faire un cours complet.',
+    ].filter(Boolean).join('\n');
+  };
+
+  const sendVerifierMessage = async (query) => {
+    if (!hasChatProvider('verifier')) {
+      setVerifierError(missingChatProviderMessage('verifier'));
       setShowSettings(true);
       return;
     }
-    try { await navigator.clipboard?.writeText(query); } catch {}
-    const sep = base.includes('?') ? '&' : '?';
-    window.open(`${base}${sep}verification=${encodeURIComponent(query)}`, '_blank', 'noopener,noreferrer');
+    setVerifierOpen(true);
+    setVerifierError(null);
+    setVerifierPending(true);
+    setVerifierMessages([{ role: 'user', content: query }]);
+    try {
+      const data = await chatCompletion('verifier', {
+        model,
+        messages: [
+          { role: 'system', content: verifierSystemPrompt },
+          { role: 'user', content: query },
+        ],
+        temperature: 0.1,
+      });
+      const content = data.choices?.[0]?.message?.content || 'Reponse vide.';
+      setVerifierMessages([{ role: 'user', content: query }, { role: 'assistant', content }]);
+    } catch (e) {
+      setVerifierError('Verification impossible : ' + e.message);
+    } finally {
+      setVerifierPending(false);
+    }
+  };
+
+  const openVerifier = (query) => {
+    if (!confirm('Envoyer cette proposition a l IA de verification ? Elle analysera l item avec une source fiable et un verdict rapide.')) return;
+    sendVerifierMessage(query);
   };
 
   // ---------- Reconstruction texte d'une page ----------
@@ -3197,17 +3273,6 @@ Contraintes :
             <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
               Suggestions : <code className="mono">gpt-5.4-mini</code> (recommandé, ~0,07 ¢/QROC) · <code className="mono">gpt-5.4-nano</code> (5× moins cher) · <code className="mono">gpt-5.5</code> (max qualité)
             </p>
-            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Page verificateur AI Engine</label>
-            <input
-              type="url"
-              value={verifierUrl}
-              onChange={e => persistVerifierUrl(e.target.value)}
-              placeholder="https://ton-site.fr/verificateur"
-              className="input-field w-full mb-2"
-            />
-            <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
-              Colle ici l'URL de la page WordPress qui contient <code className="mono">[mwai_chatbot id="verificateur"]</code>. Les boutons Verifier ouvrent cette page et copient la requete.
-            </p>
             <div className="mb-5 p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', background: 'var(--c-bg)' }}>
               <label className="flex items-center gap-3 mb-4 cursor-pointer">
                 <span className="switch">
@@ -3269,6 +3334,54 @@ Contraintes :
       {libsError && (
         <div className="max-w-7xl mx-auto px-6 py-3 text-xs mono" style={{ color: '#d93025' }}>
           Erreur de chargement des bibliothèques : {libsError}
+        </div>
+      )}
+
+      {(verifierOpen || verifierMessages.length > 0 || verifierPending || verifierError) && (
+        <div className="fixed bottom-5 right-5 z-40" style={{ width: verifierOpen ? 'min(440px, calc(100vw - 40px))' : 'auto' }}>
+          {!verifierOpen ? (
+            <button onClick={() => setVerifierOpen(true)} className="btn-primary px-4 py-3 text-sm" style={{ boxShadow: 'var(--shadow-modal)' }}>
+              IA fiable
+            </button>
+          ) : (
+            <div className="surface" style={{ boxShadow: 'var(--shadow-modal)', borderRadius: 'var(--r-md)', overflow: 'hidden' }}>
+              <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--c-line)', background: 'var(--c-bg)' }}>
+                <div>
+                  <div className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>Verificateur QCM</div>
+                  <div className="text-sm" style={{ fontWeight: 600 }}>IA medicale sourcee</div>
+                </div>
+                <button onClick={() => setVerifierOpen(false)} className="btn-secondary px-2 py-1 text-xs" aria-label="Fermer le verificateur">
+                  <IconX size={14} />
+                </button>
+              </div>
+              <div className="p-4 scrollbar" style={{ maxHeight: 'min(520px, 65vh)', overflowY: 'auto' }}>
+                {verifierMessages.map((msg, i) => (
+                  <div key={i} className="mb-3 p-3 text-sm" style={{
+                    background: msg.role === 'assistant' ? '#e8f0fe' : 'var(--c-bg)',
+                    border: '1px solid var(--c-line)',
+                    borderRadius: 'var(--r-md)',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.45,
+                  }}>
+                    <div className="mono text-[9px] mb-2" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                      {msg.role === 'assistant' ? 'Verification' : 'Question envoyee'}
+                    </div>
+                    {msg.content}
+                  </div>
+                ))}
+                {verifierPending && (
+                  <div className="p-3 text-sm" style={{ background: 'var(--c-bg)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                    Analyse avec sourcing en cours...
+                  </div>
+                )}
+                {verifierError && (
+                  <div className="p-3 text-sm" style={{ background: '#fce8e6', color: '#c5221f', border: '1px solid #f28b82', borderRadius: 'var(--r-md)' }}>
+                    {verifierError}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -4628,7 +4741,7 @@ Contraintes :
                         className="btn-secondary px-3 py-1.5 text-xs"
                         type="button"
                       >
-                        Verifier
+                        Verifier avec IA fiable
                       </button>
                     </div>
                   </div>
