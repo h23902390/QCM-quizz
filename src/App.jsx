@@ -320,6 +320,7 @@ export default function App() {
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
   const [nvidiaModel, setNvidiaModel] = useState(() => normalizeNvidiaModel(localStorage.getItem('nvidia_model')));
+  const [transcriptionProvider, setTranscriptionProvider] = useState(() => localStorage.getItem('transcription_provider') || 'openai');
   const [aiServiceProviders, setAiServiceProviders] = useState(() => {
     try {
       return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
@@ -702,32 +703,54 @@ export default function App() {
     setEntRecordId(null);
   };
 
+  const blobToBase64 = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || '').split(',')[1] || '');
+    reader.onerror = () => reject(reader.error || new Error('Lecture audio impossible.'));
+    reader.readAsDataURL(blob);
+  });
+
   const transcribeEntChunk = async (blob, filename) => {
-    const fd = new FormData();
-    fd.append('file', blob, filename);
-    fd.append('model', 'whisper-1');
-    fd.append('language', 'fr');
-    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: fd,
-    });
+    const provider = transcriptionProvider === 'nvidia' ? 'nvidia' : 'openai';
+    let resp;
+    if (provider === 'nvidia') {
+      const audioBase64 = await blobToBase64(blob);
+      resp = await fetch('/api/asr-transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioBase64,
+          filename,
+          mimeType: blob.type || 'audio/webm',
+          language: 'multi',
+        }),
+      });
+    } else {
+      const fd = new FormData();
+      fd.append('file', blob, filename);
+      fd.append('model', 'whisper-1');
+      fd.append('language', 'fr');
+      resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        body: fd,
+      });
+    }
     if (!resp.ok) {
       const t = await resp.text();
-      throw new Error(`Whisper ${resp.status} : ${t.slice(0, 200)}`);
+      throw new Error(`${provider === 'nvidia' ? 'NVIDIA ASR' : 'Whisper'} ${resp.status} : ${t.slice(0, 200)}`);
     }
     const data = await resp.json();
-    return (data.text || '').trim();
+    return (data.text || data.transcript || '').trim();
   };
-
   const transcribeEntretien = async () => {
-    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (transcriptionProvider !== 'nvidia' && !apiKey) { setEntError('Configure ta cle API OpenAI dans les Reglages, ou choisis NVIDIA ASR.'); return; }
     if (!entAudioBlob) return;
     setEntError(null);
     setEntStep('transcribing');
     setEntTranscript('');
     try {
-      const LIMIT = 24 * 1024 * 1024;
+      const LIMIT = transcriptionProvider === 'nvidia' ? 3 * 1024 * 1024 : 24 * 1024 * 1024;
       const blob = entAudioBlob;
       const ext = (entAudioName.split('.').pop() || 'webm').toLowerCase();
       const baseType = blob.type || 'audio/webm';
@@ -1808,6 +1831,10 @@ Contraintes :
     const normalized = normalizeNvidiaModel(m);
     setNvidiaModel(normalized);
     try { localStorage.setItem('nvidia_model', normalized); } catch {}
+  };
+  const persistTranscriptionProvider = (provider) => {
+    setTranscriptionProvider(provider);
+    try { localStorage.setItem('transcription_provider', provider); } catch {}
   };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
@@ -3334,9 +3361,17 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 ))}
               </div>
               <p className="text-xs mt-3" style={{ color: '#8a8a8a' }}>
-                Whisper/transcription audio utilise encore OpenAI. Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
+                Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
               </p>
             </div>
+            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Transcription audio entretiens</label>
+            <select value={transcriptionProvider} onChange={e => persistTranscriptionProvider(e.target.value)} className="input-field w-full mb-2">
+              <option value="openai">OpenAI Whisper</option>
+              <option value="nvidia" disabled={!nvidiaBackendEnabled}>NVIDIA Parakeet ASR</option>
+            </select>
+            <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
+              NVIDIA ASR utilise <code className="mono">NVIDIA_API_KEY</code> cote Vercel. Limite officielle de duree non retrouvee : l'app decoupe en petits morceaux pour tester proprement.
+            </p>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <span className="switch">
                 <input type="checkbox" checked={useAI} onChange={e => persistUseAI(e.target.checked)} />
@@ -5148,10 +5183,10 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           {/* Étape 3 : transcription */}
           {entAudioBlob && (
             <section className="mb-5" style={stepCardStyle}>
-              {stepHeader(3, totalSteps, 'Transcription · Whisper')}
+              {stepHeader(3, totalSteps, `Transcription · ${transcriptionProvider === 'nvidia' ? 'NVIDIA ASR' : 'Whisper'}`)}
 
               {entStep === 'have-audio' && (
-                <button onClick={transcribeEntretien} disabled={!apiKey} className="btn-primary px-4 py-2.5 text-sm">
+                <button onClick={transcribeEntretien} disabled={transcriptionProvider !== 'nvidia' && !apiKey} className="btn-primary px-4 py-2.5 text-sm">
                   Transcrire l'audio
                 </button>
               )}
