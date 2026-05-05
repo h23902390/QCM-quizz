@@ -1445,6 +1445,41 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     return out.join('\n\n');
   };
 
+  const extractEcosPdfTextAndImages = async (file) => {
+    if (!window.pdfjsLib) throw new Error('PDF.js non charge');
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const texts = [];
+    const candidatePages = [];
+    const imageWords = /\b(image|imagerie|figure|schema|radio|radiographie|scanner|tdm|irm|echographie|echo|ecg|eeg|dermoscop|fond d'oeil|cliche|photo|photographie)\b/i;
+    const secretWords = /\b(correction|corrige|grille|bareme|reponse attendue|elements attendus|brief patient|examinateur|notation|points)\b/i;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      const { text } = reconstructText(tc);
+      texts.push(text);
+      if (imageWords.test(text) && !secretWords.test(text)) candidatePages.push(i);
+    }
+    const images = [];
+    for (const pageNum of candidatePages.slice(0, 3)) {
+      const page = await pdf.getPage(pageNum);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = Math.min(1.35, 920 / Math.max(baseViewport.width, 1));
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      images.push({
+        page: pageNum,
+        label: `Document candidat - page ${pageNum}`,
+        dataUrl: canvas.toDataURL('image/jpeg', 0.72),
+      });
+    }
+    return { text: texts.join('\n\n'), images };
+  };
+
   const callOpenAIJson = async ({ service = 'synthese', system, user, temp = 0.2, maxTokens = null }) => {
     if (!hasChatProvider(service)) throw new Error(missingChatProviderMessage(service));
     const request = {
@@ -1810,9 +1845,10 @@ Contraintes :
     setEcosImportFilename(f.name);
     setEcosImportProcessing(true);
     try {
-      const txt = await extractPdfTextFromFile(f);
+      const { text: txt, images } = await extractEcosPdfTextAndImages(f);
       const obj = await convertRawToCaseViaGPT(txt, f.name);
       obj.source = 'perso';
+      obj.candidateImages = images;
       setEcosImportPreview(obj);
     } catch (e) {
       setEcosImportError(e.message);
@@ -4612,6 +4648,16 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                         <div className="text-xs mb-2" style={{ color: 'var(--c-ink-soft)' }}>
                           Grille : {ecosImportPreview.grilleCorrection.length} items · {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
                         </div>
+                        {(ecosImportPreview.candidateImages || []).length > 0 && (
+                          <div className="grid sm:grid-cols-2 gap-3 my-3">
+                            {(ecosImportPreview.candidateImages || []).map((img, i) => (
+                              <figure key={`${img.page}-${i}`} className="p-2" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: '#fff' }}>
+                                <img src={img.dataUrl} alt={img.label || `Document page ${img.page}`} style={{ width: '100%', borderRadius: 4, display: 'block' }} />
+                                <figcaption className="mono text-[9px] mt-2" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em' }}>{img.label}</figcaption>
+                              </figure>
+                            ))}
+                          </div>
+                        )}
                         <details className="text-xs">
                           <summary className="cursor-pointer">Aperçu consigne candidat</summary>
                           <div className="mt-2 whitespace-pre-wrap" style={{ color: 'var(--c-ink)' }}>{ecosImportPreview.consigneCandidat}</div>
@@ -4777,6 +4823,16 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               <div className="md:col-span-1 p-6 self-start" style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
                 <Eyebrow accent>Consigne candidat</Eyebrow>
                 <div className="text-sm mt-4" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--c-ink)' }}>{cleanMarkdownNoise(ecosCase.consigneCandidat)}</div>
+                {(ecosCase.candidateImages || []).length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    {(ecosCase.candidateImages || []).map((img, i) => (
+                      <figure key={`${img.page}-${i}`} style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: '#fff', padding: 8 }}>
+                        <img src={img.dataUrl} alt={img.label || `Document page ${img.page}`} style={{ width: '100%', borderRadius: 4, display: 'block' }} />
+                        <figcaption className="mono text-[9px] mt-2" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em' }}>{img.label}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2 flex flex-col" style={{ border: '1px solid var(--c-line)', background: 'var(--c-surface)', borderRadius: 'var(--r-md)', minHeight: '60vh' }}>
