@@ -2954,8 +2954,8 @@ Contraintes :
           tabs={[
             { key: 'home', label: 'Accueil' },
             { key: 'qcm', label: 'QCM / QROC' },
-            { key: 'synthese', label: 'Fiches synthÃ¨se' },
-            { key: 'qcmgen', label: 'GÃ©nÃ©rateur QCM' },
+            { key: 'synthese', label: 'Fiches synthèse' },
+            { key: 'qcmgen', label: 'Générateur QCM' },
             { key: 'ecos', label: 'ECOS' },
             { key: 'analyse', label: 'Analyse partiels' },
             { key: 'entretien', label: 'Entretien' },

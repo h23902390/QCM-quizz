@@ -535,7 +535,7 @@ async function handleFile(file){
     for(let c=0;c<hdrs.length;c++){const vals=body.map(r=>r?.[c]).filter(v=>v!=null&&v!=='');if(!vals.length)continue;if(!vals.every(v=>typeof v==='number'&&v>=0&&v<=25)){det=c;break;}}
     const src=rawScale(body,hdrs,det);
     const{subjects:subs,students}=parseBody(body,hdrs,det,20,src);
-    S.fileName=file.name;S.headers=hdrs;S.rawBody=body;S.idColIdx=det;S.subjects=subs;S.rows=students;S.excluded=new Set();S.scaleMax=20;S.sourceScale=src;S.generated=false;S.selSub=subs[0]||null;
+    S.fileName=file.name;S.headers=hdrs;S.rawBody=body;S.idColIdx=det;S.subjects=subs;S.rows=students;S.excluded=new Set();S.scaleMax=src;S.sourceScale=src;S.generated=false;S.selSub=subs[0]||null;
     recomp();renderAll();
   }catch(e){showErr(e.message||'Erreur de lecture.');S.rows=null;renderAll();}
 }
@@ -551,7 +551,7 @@ function recomp(){
 const findStu=id=>{if(!S.rows)return null;const q=(id||'').trim();if(!q)return null;const n=x=>String(x).replace(/\s/g,'');return S.rows.find(r=>r.id===q)||S.rows.find(r=>n(r.id)===n(q));};
 function toggleSub(s){S.excluded.has(s)?S.excluded.delete(s):S.excluded.add(s);S.generated=false;recomp();renderAll();}
 function setAll(on){S.excluded=on?new Set():new Set(S.subjects);S.generated=false;recomp();renderAll();}
-function chgIdCol(i){S.idColIdx=i;if(!S.rawBody)return;S.sourceScale=rawScale(S.rawBody,S.headers,i);const{subjects:subs,students}=parseBody(S.rawBody,S.headers,i,S.scaleMax,S.sourceScale);S.subjects=subs;S.rows=students;S.excluded=new Set();S.selSub=subs[0]||null;S.generated=false;recomp();renderAll();}
+function chgIdCol(i){S.idColIdx=i;if(!S.rawBody)return;S.sourceScale=rawScale(S.rawBody,S.headers,i);S.scaleMax=S.sourceScale;const{subjects:subs,students}=parseBody(S.rawBody,S.headers,i,S.scaleMax,S.sourceScale);S.subjects=subs;S.rows=students;S.excluded=new Set();S.selSub=subs[0]||null;S.generated=false;recomp();renderAll();}
 function reset(){S.fileName='';S.headers=[];S.rawBody=null;S.subjects=[];S.rows=null;S.excluded=new Set();S.generated=false;S.ids=['',''];S.tabsCount=1;S.activeTab=0;showErr('');document.getElementById('fi').value='';renderAll();}
 
 function showErr(m){document.getElementById('errbox').innerHTML=m?`<div class="errbox" style="margin-top:16px;">⚠ ${esc(m)}</div>`:''}
