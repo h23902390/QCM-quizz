@@ -6371,8 +6371,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               </p>
             </div>
             <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Liens secondaires">
-              <a href="https://github.com/h23902390/QCM-quizz" target="_blank" rel="noreferrer" className="footer-link">GitHub</a>
-              <a href="mailto:hugobettem0@gmail.com" className="footer-link">Contact</a>
+              <a href="mailto:medaifr1@gmail.com" className="footer-link">Contact</a>
+              <span className="footer-link" style={{ cursor: 'default' }}>Mentions legales : outil pedagogique, sans conseil medical personnalise. Donnees et contenus sous responsabilite de l'utilisateur.</span>
               <button type="button" onClick={() => setShowSettings(true)} className="footer-link" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>Réglages</button>
             </nav>
           </div>
