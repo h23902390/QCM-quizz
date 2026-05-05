@@ -2125,6 +2125,44 @@ Contraintes :
     allEcosCases.filter(c => ecosCategory === 'all' ? true : c.specialite === ecosCategory)
   ), [allEcosCases, ecosCategory]);
 
+  // Note /20 calculee depuis le dernier essai termine
+  const computeEcosNote = (attempt) => {
+    const items = attempt?.data?.evaluation?.items;
+    if (!Array.isArray(items) || !items.length) return null;
+    const obtained = items.reduce((s, it) => s + (Number(it.pointsObtenus) || 0), 0);
+    const max = items.reduce((s, it) => s + (Number(it.pointsMax) || 0), 0);
+    if (max <= 0) return null;
+    return Math.round((obtained / max) * 200) / 10; // /20 avec 1 decimale
+  };
+
+  // Cases groupes par specialite, tries (specialite -> [{c, lastNote, status}, ...])
+  const groupedEcosCases = useMemo(() => {
+    const map = new Map();
+    visibleEcosCases.forEach(c => {
+      const k = c.specialite || 'Autre';
+      if (!map.has(k)) map.set(k, []);
+      const lastFinished = ecosAttempts.find(a => a.case_id === c.id && a.data?.status === 'finished');
+      const inProgress = ecosAttempts.find(a => a.case_id === c.id && a.data?.status === 'in_progress');
+      const note = lastFinished ? computeEcosNote(lastFinished) : null;
+      map.get(k).push({
+        c,
+        note,
+        finishedAt: lastFinished?.data?.finishedAt || null,
+        status: inProgress ? 'in_progress' : (lastFinished ? 'finished' : 'new'),
+      });
+    });
+    // Pour chaque groupe: termines d'abord (par date desc), puis en cours, puis nouveaux
+    map.forEach((arr) => {
+      arr.sort((a, b) => {
+        const order = { in_progress: 0, finished: 1, new: 2 };
+        if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+        if (a.finishedAt && b.finishedAt) return new Date(b.finishedAt) - new Date(a.finishedAt);
+        return 0;
+      });
+    });
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
+  }, [visibleEcosCases, ecosAttempts]);
+
   const syncAiSettings = (patch) => {
     if (!session) return;
     saveUserSettings(patch).catch(e => console.warn('saveUserSettings', e));
@@ -3664,6 +3702,60 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           box-shadow: var(--shadow-lift);
         }
 
+        /* ---------- Chip filter row (specialites ECOS) ---------- */
+        .chip-row {
+          display: flex; flex-wrap: wrap; gap: 6px;
+          overflow-x: auto; -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .chip-row::-webkit-scrollbar { display: none; }
+        .chip {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 12px; font-size: 12.5px; font-weight: 500;
+          border: 1px solid var(--c-line); border-radius: 999px;
+          background: var(--c-bg); color: var(--c-ink-soft);
+          white-space: nowrap; cursor: pointer;
+          transition: all var(--d-fast) var(--ease-out-quart);
+        }
+        .chip:hover { border-color: var(--c-ink-mute); color: var(--c-ink); }
+        .chip--active { background: var(--c-ink); color: var(--c-bg); border-color: var(--c-ink); }
+        .chip-count {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 10px; opacity: 0.65;
+        }
+        .chip--active .chip-count { opacity: 0.75; }
+
+        /* ---------- ECOS specialite section ---------- */
+        .ecos-spec-section { margin-bottom: clamp(36px, 5vw, 56px); }
+        .ecos-spec-header {
+          display: flex; align-items: center; justify-content: space-between;
+          flex-wrap: wrap; gap: 12px;
+          padding-bottom: 10px; margin-bottom: 18px;
+          border-bottom: 1px solid var(--c-line);
+        }
+        .ecos-spec-title {
+          font-weight: 600; font-size: clamp(20px, 2.4vw, 28px);
+          letter-spacing: -0.02em; line-height: 1.1;
+        }
+        .ecos-spec-count {
+          color: var(--c-ink-mute); letter-spacing: 0.14em; text-transform: uppercase;
+        }
+        .ecos-spec-avg {
+          color: var(--c-ink-soft); padding: 4px 10px;
+          background: var(--c-surface); border: 1px solid var(--c-line);
+          border-radius: var(--r-sm);
+        }
+        .ecos-spec-avg strong { color: var(--c-ink); font-weight: 700; }
+
+        /* ---------- ECOS note badge (resultat dernier essai) ---------- */
+        .ecos-note {
+          display: inline-flex; align-items: baseline; gap: 2px;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 12px; padding: 3px 9px; border-radius: var(--r-xs);
+          border: 1px solid; font-weight: 500;
+        }
+        .ecos-note strong { font-weight: 700; font-size: 13.5px; }
+
         /* ---------- ECOS num + duration chip ---------- */
         .ecos-num {
           font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -4850,20 +4942,34 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               </Reveal>
             )}
 
-            {/* Barre de filtres + import */}
+            {/* Barre de filtres (chips) + import */}
             <Reveal>
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b" style={{ borderColor: 'var(--c-line)' }}>
-                <div className="flex items-center gap-3">
-                  <span className="mono text-[10px] uppercase tracking-widest" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>Catégorie</span>
-                  <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1.5">
-                    <option value="all">Toutes</option>
-                    {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
+              <div className="mb-8 pb-4 border-b" style={{ borderColor: 'var(--c-line)' }}>
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <span className="mono text-[10px] uppercase" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>Spécialité</span>
+                  <button onClick={() => { setEcosImportOpen(v => !v); setEcosImportError(null); }}
+                    className="btn-secondary px-3 py-1.5 text-xs">
+                    {ecosImportOpen ? <><IconX size={11} /> Fermer l'import</> : <><IconPlus size={11} /> Importer un ECOS (PDF)</>}
+                  </button>
                 </div>
-                <button onClick={() => { setEcosImportOpen(v => !v); setEcosImportError(null); }}
-                  className="btn-secondary px-3 py-1.5 text-xs">
-                  {ecosImportOpen ? <><IconX size={11} /> Fermer l'import</> : <><IconPlus size={11} /> Importer un ECOS (PDF)</>}
-                </button>
+                <div className="chip-row">
+                  <button
+                    type="button"
+                    className={'chip' + (ecosCategory === 'all' ? ' chip--active' : '')}
+                    onClick={() => setEcosCategory('all')}
+                  >Toutes <span className="chip-count">{allEcosCases.length}</span></button>
+                  {ecosCategories.map(cat => {
+                    const count = allEcosCases.filter(x => x.specialite === cat).length;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        className={'chip' + (ecosCategory === cat ? ' chip--active' : '')}
+                        onClick={() => setEcosCategory(cat)}
+                      >{cat} <span className="chip-count">{count}</span></button>
+                    );
+                  })}
+                </div>
               </div>
             </Reveal>
 
@@ -4958,47 +5064,67 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               </div>
             </Reveal>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleEcosCases.map((c, idx) => {
-                const isCustom = !!customCases.find(cc => cc.id === c.id);
-                const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
-                const inProgress = lastAttempt?.data?.status === 'in_progress';
-                const finished = lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt;
-                const points = (c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0);
-                const num = String(idx + 1).padStart(2, '0');
-                return (
-                  <div key={c.id} className="ecos-card relative" onClick={() => startEcos(c)}>
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <span className="ecos-num">{num}</span>
-                      <span className="mono text-[10px] ecos-duree">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: 4 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        {c.duree} MIN
+            {groupedEcosCases.map(([spec, items]) => {
+              const doneCount = items.filter(x => x.status === 'finished').length;
+              const inProgressCount = items.filter(x => x.status === 'in_progress').length;
+              const notes = items.map(x => x.note).filter(n => n != null);
+              const avgNote = notes.length ? Math.round((notes.reduce((s, n) => s + n, 0) / notes.length) * 10) / 10 : null;
+              return (
+                <section key={spec} className="ecos-spec-section">
+                  <div className="ecos-spec-header">
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <h3 className="display ecos-spec-title">{spec}</h3>
+                      <span className="mono text-[10px] ecos-spec-count">{items.length} cas</span>
+                      {doneCount > 0 && <span className="badge badge--success">{doneCount} fait{doneCount > 1 ? 's' : ''}</span>}
+                      {inProgressCount > 0 && <span className="badge badge--warning">{inProgressCount} en cours</span>}
+                    </div>
+                    {avgNote != null && (
+                      <span className="mono text-xs ecos-spec-avg" title="Moyenne sur les cas terminés">
+                        Moy. <strong>{avgNote.toFixed(1).replace('.', ',')}</strong>/20
                       </span>
-                    </div>
-                    <div className="mono text-[10px] mb-2" style={{ color: 'var(--c-accent)', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600 }}>{c.specialite}</div>
-                    <div className="display mb-3" style={{ fontWeight: 600, fontSize: '17px', lineHeight: 1.25, letterSpacing: '-0.01em' }}>{c.titre}</div>
-                    <div className="text-xs" style={{ color: 'var(--c-ink-soft)' }}>
-                      {(c.grilleCorrection || []).length} items · {points} pts
-                    </div>
-                    {(inProgress || finished || isCustom) && (
-                      <div className="mt-4 pt-3 flex flex-wrap gap-2 items-center" style={{ borderTop: '1px solid var(--c-line)' }}>
-                        {inProgress && (
-                          <span className="badge badge--warning">● EN COURS</span>
-                        )}
-                        {finished && (
-                          <span className="badge badge--success">FAIT</span>
-                        )}
-                        <span className={isCustom ? 'badge badge--perso' : 'badge badge--neutral'}>{isCustom ? 'PERSO' : 'FAC'}</span>
-                        {isCustom && (
-                          <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
-                            className="ml-auto text-xs underline" style={{ color: 'var(--c-accent)' }}>Supprimer</button>
-                        )}
-                      </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {items.map(({ c, note, status }, idx) => {
+                      const isCustom = !!customCases.find(cc => cc.id === c.id);
+                      const points = (c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0);
+                      const num = String(idx + 1).padStart(2, '0');
+                      const noteColor = note == null ? null : note >= 14 ? '#1f7a3a' : note >= 10 ? '#7a5a10' : '#b32f24';
+                      const noteBg = note == null ? null : note >= 14 ? '#e6f3e0' : note >= 10 ? '#fef6dd' : '#fde8e0';
+                      return (
+                        <div key={c.id} className="ecos-card relative" onClick={() => startEcos(c)}>
+                          <div className="flex items-start justify-between gap-3 mb-4">
+                            <span className="ecos-num">{num}</span>
+                            <span className="mono text-[10px] ecos-duree">
+                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: 4 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                              {c.duree} MIN
+                            </span>
+                          </div>
+                          <div className="display mb-3" style={{ fontWeight: 600, fontSize: '17px', lineHeight: 1.25, letterSpacing: '-0.01em' }}>{c.titre}</div>
+                          <div className="text-xs" style={{ color: 'var(--c-ink-soft)' }}>
+                            {(c.grilleCorrection || []).length} items · {points} pts
+                          </div>
+                          <div className="mt-4 pt-3 flex flex-wrap gap-2 items-center" style={{ borderTop: '1px solid var(--c-line)' }}>
+                            {status === 'in_progress' && <span className="badge badge--warning">● EN COURS</span>}
+                            {note != null && (
+                              <span className="ecos-note" style={{ color: noteColor, background: noteBg, borderColor: noteColor + '33' }}>
+                                <strong>{note.toFixed(1).replace('.', ',')}</strong>/20
+                              </span>
+                            )}
+                            {status === 'finished' && note == null && <span className="badge badge--success">FAIT</span>}
+                            <span className={isCustom ? 'badge badge--perso' : 'badge badge--neutral'}>{isCustom ? 'PERSO' : 'FAC'}</span>
+                            {isCustom && (
+                              <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
+                                className="ml-auto text-xs underline" style={{ color: 'var(--c-accent)' }}>Supprimer</button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
           </>
         )}
 
