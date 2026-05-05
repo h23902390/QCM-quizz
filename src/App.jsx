@@ -2117,12 +2117,35 @@ Contraintes :
   }, [session]);
 
   const allEcosCases = useMemo(() => [...ECOS_CASES, ...customCases], [customCases]);
+
+  // Categorisation: 7 grandes specialites + Autre. Match keywords sur c.specialite
+  const ECOS_CATEGORY_RULES = [
+    { key: 'Cardiologie',          patterns: ['cardio', 'cardiaque', 'coronar', 'infarctus', 'arythm'] },
+    { key: 'Pneumologie',          patterns: ['pneumo', 'pulmonair', 'respirat', 'asthme', 'bpco'] },
+    { key: 'Pédiatrie',            patterns: ['pediatr', 'pédiatr', 'pedia', 'enfant', 'nourrisson', 'nouveau-ne', 'nouveau-né'] },
+    { key: 'Neurologie',           patterns: ['neuro', 'avc', 'epilep', 'épilep', 'cephale', 'céphal', 'migraine'] },
+    { key: 'Gynéco-Obstétrique',   patterns: ['gyneco', 'gynéco', 'obstet', 'obstét', 'grossesse', 'accouch', 'menstr'] },
+    { key: 'Dermatologie',         patterns: ['dermato', 'dermat', 'cutane', 'cutané', 'peau'] },
+    { key: 'Orthopédie',           patterns: ['ortho', 'fracture', 'rhumato', 'articul', 'osteo', 'ostéo'] },
+  ];
+  const categorizeEcos = (spec) => {
+    if (!spec) return 'Autre';
+    const norm = String(spec).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    for (const r of ECOS_CATEGORY_RULES) {
+      if (r.patterns.some(p => norm.includes(p))) return r.key;
+    }
+    return 'Autre';
+  };
   const ecosCategories = useMemo(() => {
-    const arr = Array.from(new Set(allEcosCases.map(c => c?.specialite).filter(Boolean)));
-    return arr.sort((a, b) => a.localeCompare(b, 'fr'));
+    // ordre fixe: 7 specialites principales + Autre (toujours en dernier si non vide)
+    const order = ECOS_CATEGORY_RULES.map(r => r.key);
+    const present = new Set(allEcosCases.map(c => categorizeEcos(c?.specialite)));
+    const main = order.filter(k => present.has(k));
+    if (present.has('Autre')) main.push('Autre');
+    return main;
   }, [allEcosCases]);
   const visibleEcosCases = useMemo(() => (
-    allEcosCases.filter(c => ecosCategory === 'all' ? true : c.specialite === ecosCategory)
+    allEcosCases.filter(c => ecosCategory === 'all' ? true : categorizeEcos(c.specialite) === ecosCategory)
   ), [allEcosCases, ecosCategory]);
 
   // Note /20 calculee depuis le dernier essai termine
@@ -2135,11 +2158,11 @@ Contraintes :
     return Math.round((obtained / max) * 200) / 10; // /20 avec 1 decimale
   };
 
-  // Cases groupes par specialite, tries (specialite -> [{c, lastNote, status}, ...])
+  // Cases groupes par categorie, tries (categorie -> [{c, lastNote, status}, ...])
   const groupedEcosCases = useMemo(() => {
     const map = new Map();
     visibleEcosCases.forEach(c => {
-      const k = c.specialite || 'Autre';
+      const k = categorizeEcos(c.specialite);
       if (!map.has(k)) map.set(k, []);
       const lastFinished = ecosAttempts.find(a => a.case_id === c.id && a.data?.status === 'finished');
       const inProgress = ecosAttempts.find(a => a.case_id === c.id && a.data?.status === 'in_progress');
@@ -2160,7 +2183,9 @@ Contraintes :
         return 0;
       });
     });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'fr'));
+    // Ordre fixe (cardio -> ortho -> Autre)
+    const order = [...ECOS_CATEGORY_RULES.map(r => r.key), 'Autre'];
+    return Array.from(map.entries()).sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
   }, [visibleEcosCases, ecosAttempts]);
 
   const syncAiSettings = (patch) => {
@@ -4959,7 +4984,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                     onClick={() => setEcosCategory('all')}
                   >Toutes <span className="chip-count">{allEcosCases.length}</span></button>
                   {ecosCategories.map(cat => {
-                    const count = allEcosCases.filter(x => x.specialite === cat).length;
+                    const count = allEcosCases.filter(x => categorizeEcos(x.specialite) === cat).length;
                     return (
                       <button
                         key={cat}
