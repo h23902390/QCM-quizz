@@ -4424,38 +4424,82 @@ Contraintes :
         )}
       </main>
 
-      {mode === 'entretien' && (
-        <main className="max-w-4xl mx-auto px-6 py-8">
-          <div className="mb-6">
-            <h1 className="display text-3xl mb-2" style={{ fontWeight: 600 }}>Entretien patient</h1>
-            <p className="text-sm" style={{ color: '#5a5a5a' }}>
-              Enregistre ou importe un entretien (jusqu'à 30 min). L'IA produit une observation médicale structurée.
-            </p>
-            {supabaseEnabled && session && (
-              <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                ☁ Audio + transcript + restitution stockés sur ton compte Supabase et auto-supprimés après 24h.
-              </p>
-            )}
-            {supabaseEnabled && !session && (
-              <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
-                Connecte-toi pour conserver les entretiens 24h sur ton compte (sinon tout reste en local et disparaît au reload).
-              </p>
-            )}
+      {mode === 'entretien' && (() => {
+        const clinicalBlue = { background: 'rgba(44,111,182,0.10)', color: '#1f5594', border: '1px solid rgba(44,111,182,0.28)' };
+        const clinicalGreen = { background: 'rgba(58,155,111,0.10)', color: '#2c7a55', border: '1px solid rgba(58,155,111,0.30)' };
+        const stepCardStyle = {
+          position: 'relative',
+          background: 'var(--c-surface)',
+          border: '1px solid var(--c-line)',
+          borderRadius: 'var(--r-md)',
+          padding: 'clamp(20px, 2.4vw, 32px)',
+          overflow: 'hidden',
+        };
+        const stepHeader = (num, total, label) => (
+          <div className="flex items-baseline justify-between gap-4 mb-5 pb-4" style={{ borderBottom: '1px solid var(--c-line)' }}>
+            <div className="flex items-baseline gap-4">
+              <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
+                {String(num).padStart(2, '0')} / {String(total).padStart(2, '0')}
+              </span>
+              <span className="display" style={{ fontWeight: 500, fontSize: 'clamp(18px, 1.6vw, 22px)', letterSpacing: '-0.015em' }}>
+                {label}
+              </span>
+            </div>
           </div>
+        );
+        const totalSteps = 5;
+        return (
+        <main className="max-w-4xl mx-auto px-6 py-8">
+          <section className="section-macro" style={{ paddingTop: 'clamp(24px, 4vw, 56px)', paddingBottom: 'clamp(20px, 3vw, 40px)' }}>
+            <Reveal>
+              <Eyebrow accent>Outil · Entretien patient</Eyebrow>
+            </Reveal>
+            <Reveal delay={80} as="h1">
+              <span className="display block mt-5" style={{
+                fontWeight: 600, fontSize: 'clamp(32px, 5vw, 56px)',
+                lineHeight: 1.05, letterSpacing: '-0.025em',
+              }}>
+                De la voix au dossier,<br />
+                <span style={{ fontStyle: 'italic', fontWeight: 400, color: 'var(--c-ink-soft)' }}>en cinq étapes.</span>
+              </span>
+            </Reveal>
+            <Reveal delay={140}>
+              <p className="mt-5 text-sm max-w-xl" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.6 }}>
+                Enregistre ou importe un entretien (jusqu'à 30 min). L'IA produit une observation médicale structurée, un courrier confrère et une suggestion d'ordonnance.
+              </p>
+            </Reveal>
+            <Reveal delay={200}>
+              <div className="mt-5 flex flex-wrap gap-2">
+                {supabaseEnabled && session && (
+                  <span className="mono text-[10px] px-2 py-1" style={{ ...clinicalBlue, letterSpacing: '0.14em', textTransform: 'uppercase', borderRadius: 2 }}>
+                    Stocké 24 h · Supabase
+                  </span>
+                )}
+                {supabaseEnabled && !session && (
+                  <span className="mono text-[10px] px-2 py-1" style={{ background: 'var(--c-bg)', color: 'var(--c-ink-soft)', border: '1px solid var(--c-line)', letterSpacing: '0.14em', textTransform: 'uppercase', borderRadius: 2 }}>
+                    Mode local · connecte-toi pour persister
+                  </span>
+                )}
+              </div>
+            </Reveal>
+          </section>
+
+          <div className="section-divider" style={{ margin: 'clamp(16px, 2.5vw, 28px) 0 clamp(28px, 3vw, 40px)' }} />
 
           {!apiKey && (
-            <div className="mb-4 p-3 text-sm" style={{ background: '#fdf3ee', border: '1px solid #b54125', color: '#b54125' }}>
-              Configure ta clé API OpenAI dans les Réglages pour utiliser cet outil.
+            <div className="mb-5 p-4 text-sm flex items-start gap-3" style={{ background: '#fdf3ee', borderLeft: '3px solid var(--c-accent)', color: '#6b1f0a', borderRadius: 'var(--r-sm, 4px)' }}>
+              <span className="mono text-[10px]" style={{ letterSpacing: '0.14em' }}>CLÉ API REQUISE</span>
+              <span>Configure ta clé OpenAI dans les Réglages pour utiliser cet outil.</span>
             </div>
           )}
           {entError && (
-            <div className="mb-4 p-3 text-sm" style={{ background: '#fdf3ee', border: '1px solid #b54125', color: '#b54125' }}>
+            <div className="mb-5 p-4 text-sm" style={{ background: '#fdf3ee', borderLeft: '3px solid var(--c-accent)', color: '#6b1f0a', borderRadius: 'var(--r-sm, 4px)' }}>
               {entError}
             </div>
           )}
 
-          <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-            <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>Infos document</h2>
+          <section className="mb-5" style={stepCardStyle}>
+            {stepHeader(1, totalSteps, 'Infos document')}
             <div className="grid md:grid-cols-3 gap-3 mb-3">
               <input
                 type="text"
@@ -4497,21 +4541,23 @@ Contraintes :
                 className="input-field text-sm"
               />
             </div>
-            <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+            <p className="text-xs mt-3 mono" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.06em' }}>
               L'identité patient sert seulement à générer les documents affichés ici. Le profil médecin est conservé sur Supabase.
             </p>
           </section>
 
-          {/* Étape 1 : capture audio */}
-          <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-            <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>1. Audio</h2>
+          {/* Étape 2 : capture audio */}
+          <section className="mb-5" style={stepCardStyle}>
+            {stepHeader(2, totalSteps, 'Capture audio')}
 
             {!entAudioBlob && !entRecording && (
-              <div className="flex flex-wrap gap-3">
-                <button onClick={startEntRecording} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
-                  ● Démarrer l'enregistrement
+              <div className="flex flex-wrap gap-3 items-center">
+                <button onClick={startEntRecording} disabled={!apiKey} className="btn-primary px-6 py-3 text-sm" style={{ fontSize: 14 }}>
+                  <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: '#ff6b4a', verticalAlign: 'middle' }} />
+                  Démarrer l'enregistrement
                 </button>
-                <button onClick={() => entFileInputRef.current?.click()} className="btn-secondary px-4 py-2 text-sm">
+                <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>OU</span>
+                <button onClick={() => entFileInputRef.current?.click()} className="btn-secondary px-4 py-2.5 text-sm">
                   Importer un fichier audio
                 </button>
                 <input
@@ -4525,41 +4571,65 @@ Contraintes :
             )}
 
             {entRecording && (
-              <div className="flex items-center gap-4">
-                <span className="inline-block w-3 h-3 rounded-full" style={{ background: '#b54125', animation: 'pulse 1.2s infinite' }} />
-                <span className="mono text-lg">{fmtMs(entRecMs)}</span>
-                <span className="text-xs" style={{ color: '#5a5a5a' }}>(stop auto à 30:00)</span>
-                <button onClick={stopEntRecording} className="btn-primary px-4 py-2 text-sm" style={{ background: '#b54125' }}>
-                  ■ Arrêter
-                </button>
+              <div className="p-4" style={{ background: 'var(--c-bg)', borderLeft: '3px solid var(--c-accent)', borderRadius: 'var(--r-sm, 4px)' }}>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-full" style={{ background: 'var(--c-accent)', animation: 'pulse 1.2s infinite' }} />
+                    <span className="mono text-[10px]" style={{ color: 'var(--c-accent)', letterSpacing: '0.18em' }}>REC</span>
+                  </span>
+                  <span className="display mono" style={{ fontSize: 28, fontWeight: 500, letterSpacing: '-0.01em' }}>{fmtMs(entRecMs)}</span>
+                  <span aria-hidden="true" className="flex items-end gap-[2px] h-6 ml-2">
+                    {[0,1,2,3,4,5,6,7].map(i => (
+                      <span key={i} style={{
+                        display: 'inline-block', width: 3,
+                        background: 'var(--c-ink)',
+                        height: `${30 + ((i*37 + entRecMs/120) % 70)}%`,
+                        opacity: 0.55,
+                        animation: `pulse ${1 + (i % 3) * 0.25}s ease-in-out ${i * 0.08}s infinite alternate`,
+                      }} />
+                    ))}
+                  </span>
+                  <span className="mono text-[10px] ml-auto" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em' }}>STOP AUTO · 30:00</span>
+                  <button onClick={stopEntRecording} className="btn-primary px-4 py-2 text-sm" style={{ background: 'var(--c-accent)' }}>
+                    ■ Arrêter
+                  </button>
+                </div>
               </div>
             )}
 
             {entAudioBlob && !entRecording && (
               <div>
-                <div className="flex items-center gap-3 flex-wrap mb-3">
-                  <span className="text-sm">{entAudioName}</span>
-                  <span className="text-xs mono" style={{ color: '#5a5a5a' }}>
+                <div className="flex items-center gap-2 flex-wrap mb-4">
+                  <span className="text-sm" style={{ fontWeight: 500 }}>{entAudioName}</span>
+                  <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalBlue, letterSpacing: '0.12em', borderRadius: 2 }}>
                     {(entAudioBlob.size / (1024 * 1024)).toFixed(2)} Mo
                   </span>
-                  {entUploading && <span className="text-xs" style={{ color: '#8a8a8a' }}>↑ Upload Supabase…</span>}
-                  {!entUploading && entRecordId && <span className="text-xs" style={{ color: '#3a7a3a' }}>✓ Stocké (24h)</span>}
+                  {entUploading && (
+                    <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalBlue, letterSpacing: '0.12em', borderRadius: 2 }}>
+                      ↑ UPLOAD SUPABASE
+                    </span>
+                  )}
+                  {!entUploading && entRecordId && (
+                    <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalGreen, letterSpacing: '0.12em', borderRadius: 2 }}>
+                      ✓ STOCKÉ 24 H
+                    </span>
+                  )}
                 </div>
-                {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-3" />}
-                <div className="flex flex-wrap gap-3">
+                {entAudioUrl && <audio controls src={entAudioUrl} className="w-full mb-4" />}
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={saveCurrentEntretien}
                     disabled={entUploading}
-                    className="btn-primary px-3 py-2 text-xs"
+                    className="btn-primary px-4 py-2 text-xs"
                   >
                     {entRecordId ? 'Enregistrer les modifications' : 'Enregistrer l’audio'}
                   </button>
-                  <button onClick={resetEntretien} className="btn-secondary px-3 py-2 text-xs">
+                  <button onClick={resetEntretien} className="btn-secondary px-4 py-2 text-xs">
                     ↺ Recommencer
                   </button>
                 </div>
                 {supabaseEnabled && !session && (
-                  <p className="text-xs mt-2" style={{ color: '#8a8a8a' }}>
+                  <p className="text-xs mt-3 mono" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.06em' }}>
                     Connecte-toi pour enregistrer cet audio sur Supabase.
                   </p>
                 )}
@@ -4567,31 +4637,35 @@ Contraintes :
             )}
           </section>
 
-          {/* Étape 2 : transcription */}
+          {/* Étape 3 : transcription */}
           {entAudioBlob && (
-            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>2. Transcription (Whisper)</h2>
+            <section className="mb-5" style={stepCardStyle}>
+              {stepHeader(3, totalSteps, 'Transcription · Whisper')}
 
               {entStep === 'have-audio' && (
-                <button onClick={transcribeEntretien} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
+                <button onClick={transcribeEntretien} disabled={!apiKey} className="btn-primary px-4 py-2.5 text-sm">
                   Transcrire l'audio
                 </button>
               )}
 
               {entStep === 'transcribing' && (
-                <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--c-ink-soft)' }}>
+                  <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalBlue, letterSpacing: '0.14em', borderRadius: 2 }}>EN COURS</span>
                   Transcription en cours…
-                  {entProgress.total > 1 && ` (segment ${entProgress.current}/${entProgress.total})`}
+                  {entProgress.total > 1 && (
+                    <span className="mono text-xs">segment {entProgress.current}/{entProgress.total}</span>
+                  )}
                 </div>
               )}
               {entStep === 'labelling' && (
-                <div className="text-sm" style={{ color: '#5a5a5a' }}>
+                <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--c-ink-soft)' }}>
+                  <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalBlue, letterSpacing: '0.14em', borderRadius: 2 }}>EN COURS</span>
                   Étiquetage Médecin / Patient…
                 </div>
               )}
 
               {entTranscript && (
-                <div className="mt-3">
+                <div className="mt-2">
                   <textarea
                     value={entTranscript}
                     onChange={(e) => setEntTranscript(e.target.value)}
@@ -4599,7 +4673,7 @@ Contraintes :
                     className="input-field w-full text-sm"
                     style={{ fontFamily: 'inherit' }}
                   />
-                  <p className="text-xs mt-1" style={{ color: '#8a8a8a' }}>
+                  <p className="text-xs mt-2 mono" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.06em' }}>
                     Tu peux corriger la transcription avant la restitution.
                   </p>
                 </div>
@@ -4607,10 +4681,10 @@ Contraintes :
             </section>
           )}
 
-          {/* Étape 3 : restitution IA */}
+          {/* Étape 4 : restitution IA */}
           {(entStep === 'transcribed' || entStep === 'generating' || entStep === 'done') && (
-            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>3. Observation structurée</h2>
+            <section className="mb-5" style={stepCardStyle}>
+              {stepHeader(4, totalSteps, 'Observation structurée')}
 
               {(entStep === 'transcribed' || entStep === 'done') && (
                 <div className="mb-3">
@@ -4621,19 +4695,25 @@ Contraintes :
                     placeholder="Contexte (optionnel) : ex. consultation de médecine générale, urgences…"
                     className="input-field w-full text-sm mb-3"
                   />
-                  <button onClick={generateEntNote} disabled={!hasChatProvider('entretien')} className="btn-primary px-4 py-2 text-sm">
+                  <button onClick={generateEntNote} disabled={!hasChatProvider('entretien')} className="btn-primary px-4 py-2.5 text-sm">
                     {entStep === 'done' ? '↺ Régénérer la restitution' : 'Générer la restitution'}
                   </button>
                 </div>
               )}
 
               {entStep === 'generating' && (
-                <div className="text-sm" style={{ color: '#5a5a5a' }}>Génération en cours…</div>
+                <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--c-ink-soft)' }}>
+                  <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalBlue, letterSpacing: '0.14em', borderRadius: 2 }}>EN COURS</span>
+                  Génération en cours…
+                </div>
               )}
 
               {entNote && (
-                <div className="mt-4 p-4" style={{ background: '#faf7ef', border: '1px solid #e6dfc8', borderRadius: 'var(--r-md)' }}>
-                  <pre className="whitespace-pre-wrap text-sm" style={{ fontFamily: 'inherit', lineHeight: 1.6 }}>
+                <div className="mt-2 p-5" style={{ background: 'var(--c-bg)', borderLeft: '2px solid var(--c-ink)', borderRadius: 'var(--r-sm, 4px)' }}>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="mono text-[10px] px-2 py-0.5" style={{ ...clinicalGreen, letterSpacing: '0.14em', borderRadius: 2 }}>✓ RESTITUTION DISPO</span>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-sm" style={{ fontFamily: 'inherit', lineHeight: 1.65, color: 'var(--c-ink)' }}>
                     {entNote}
                   </pre>
                   <div className="mt-4 flex gap-2">
@@ -4669,8 +4749,8 @@ Contraintes :
           )}
 
           {(entStep === 'done' || entNote || entTranscript) && (
-            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-              <h2 className="display text-lg mb-3" style={{ fontWeight: 600 }}>4. Courrier et ordonnance</h2>
+            <section className="mb-5" style={stepCardStyle}>
+              {stepHeader(5, totalSteps, 'Courrier et ordonnance')}
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -4739,53 +4819,70 @@ Contraintes :
 
           {/* Historique 24h */}
           {supabaseEnabled && session && (
-            <section className="mb-6 p-5 bg-white" style={{ border: '1px solid #d6d0c1', borderRadius: 'var(--r-md)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="display text-lg" style={{ fontWeight: 600 }}>Mes entretiens (24h)</h2>
-                <button onClick={refreshEntHistory} className="btn-secondary px-3 py-1.5 text-xs">↻ Actualiser</button>
-              </div>
-              {entHistoryLoading && <div className="text-xs" style={{ color: '#8a8a8a' }}>Chargement…</div>}
-              {!entHistoryLoading && entHistory.length === 0 && (
-                <div className="text-xs" style={{ color: '#8a8a8a' }}>Aucun entretien stocké pour l'instant.</div>
-              )}
-              {entHistory.length > 0 && (
-                <ul className="divide-y" style={{ borderColor: '#e6dfc8' }}>
-                  {entHistory.map(row => {
-                    const created = new Date(row.created_at);
-                    const expires = new Date(row.expires_at);
-                    const remainMs = expires - new Date();
-                    const remainH = Math.max(0, Math.floor(remainMs / 3600000));
-                    const remainM = Math.max(0, Math.floor((remainMs % 3600000) / 60000));
-                    const sizeMo = row.size_bytes ? (row.size_bytes / (1024 * 1024)).toFixed(1) : '?';
-                    const dur = row.duration_ms ? fmtMs(row.duration_ms) : null;
-                    return (
-                      <li key={row.id} className="py-3 flex items-center gap-3 flex-wrap">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm">
-                            {created.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
-                            {dur && <span className="ml-2 mono text-xs" style={{ color: '#8a8a8a' }}>{dur}</span>}
-                            <span className="ml-2 text-xs" style={{ color: '#8a8a8a' }}>{sizeMo} Mo</span>
+            <>
+              <div className="section-divider" style={{ margin: 'clamp(20px, 3vw, 36px) 0' }} />
+              <section className="mb-6">
+                <div className="flex items-baseline justify-between mb-5">
+                  <div>
+                    <Eyebrow>Mes entretiens · 24 h</Eyebrow>
+                    <div className="display mt-2" style={{ fontWeight: 500, fontSize: 'clamp(20px, 2vw, 26px)', letterSpacing: '-0.02em' }}>
+                      {entHistory.length} stocké{entHistory.length > 1 ? 's' : ''}
+                      <span style={{ color: 'var(--c-ink-mute)', fontWeight: 400 }}> · auto-suppression</span>
+                    </div>
+                  </div>
+                  <button onClick={refreshEntHistory} className="btn-secondary px-3 py-1.5 text-xs">↻ Actualiser</button>
+                </div>
+                {entHistoryLoading && (
+                  <div className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>CHARGEMENT…</div>
+                )}
+                {!entHistoryLoading && entHistory.length === 0 && (
+                  <div className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>AUCUN ENTRETIEN STOCKÉ POUR L'INSTANT.</div>
+                )}
+                {entHistory.length > 0 && (
+                  <ul className="space-y-1">
+                    {entHistory.map(row => {
+                      const created = new Date(row.created_at);
+                      const expires = new Date(row.expires_at);
+                      const remainMs = expires - new Date();
+                      const remainH = Math.max(0, Math.floor(remainMs / 3600000));
+                      const remainM = Math.max(0, Math.floor((remainMs % 3600000) / 60000));
+                      const expiringSoon = remainMs < 2 * 3600000;
+                      const sizeMo = row.size_bytes ? (row.size_bytes / (1024 * 1024)).toFixed(1) : '?';
+                      const dur = row.duration_ms ? fmtMs(row.duration_ms) : null;
+                      const statusStyle = row.note ? clinicalGreen : (row.transcript ? clinicalBlue : { background: 'var(--c-bg)', color: 'var(--c-ink-soft)', border: '1px solid var(--c-line)' });
+                      const statusLabel = row.note ? '✓ RESTITUTION' : (row.transcript ? '✓ TRANSCRIT' : 'AUDIO BRUT');
+                      return (
+                        <li key={row.id} className="py-3 px-4 flex items-center gap-3 flex-wrap" style={{ borderLeft: `2px solid ${expiringSoon ? 'var(--c-accent)' : 'var(--c-line)'}`, background: 'var(--c-surface)' }}>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm flex items-baseline gap-3 flex-wrap">
+                              <span style={{ fontWeight: 500 }}>{created.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                              {dur && <span className="mono text-xs" style={{ color: 'var(--c-ink-soft)' }}>{dur}</span>}
+                              <span className="mono text-xs" style={{ color: 'var(--c-ink-mute)' }}>{sizeMo} Mo</span>
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                              <span className="mono text-[10px] px-2 py-0.5" style={{ ...statusStyle, letterSpacing: '0.12em', borderRadius: 2 }}>{statusLabel}</span>
+                              <span className="mono text-[10px]" style={{ color: expiringSoon ? 'var(--c-accent)' : 'var(--c-ink-mute)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>
+                                EXPIRE DANS {remainH}H{String(remainM).padStart(2, '0')}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-xs" style={{ color: '#8a8a8a' }}>
-                            {row.note ? '✓ Restitution' : (row.transcript ? '✓ Transcrit' : 'Audio brut')}
-                            <span className="ml-2">· expire dans {remainH}h{String(remainM).padStart(2, '0')}</span>
-                          </div>
-                        </div>
-                        <button onClick={() => restoreEntretien(row)} className="btn-secondary px-3 py-1.5 text-xs">Ouvrir</button>
-                        <button
-                          onClick={() => { if (confirm('Supprimer cet entretien ?')) deleteEntretienRow(row); }}
-                          className="btn-secondary px-3 py-1.5 text-xs"
-                          style={{ color: '#b54125' }}
-                        >Supprimer</button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
+                          <button onClick={() => restoreEntretien(row)} className="btn-secondary px-3 py-1.5 text-xs">Ouvrir</button>
+                          <button
+                            onClick={() => { if (confirm('Supprimer cet entretien ?')) deleteEntretienRow(row); }}
+                            className="btn-secondary px-3 py-1.5 text-xs"
+                            style={{ color: 'var(--c-accent)' }}
+                          >Supprimer</button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            </>
           )}
         </main>
-      )}
+        );
+      })()}
 
       {mode === 'analyse' && (
         <iframe
