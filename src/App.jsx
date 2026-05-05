@@ -226,6 +226,11 @@ const AI_SERVICES = [
   { key: 'verifier', label: 'Verificateur QCM' },
   { key: 'entretien', label: 'Entretien documents' },
 ];
+const normalizeNvidiaModel = (value) => {
+  const modelName = (value || '').trim();
+  if (!modelName || modelName === 'z-ai/glm-4.7') return 'z-ai/glm4.7';
+  return modelName;
+};
 const normalizeRestorableMode = (mode) => {
   if (RESTORABLE_MODES.has(mode)) return mode;
   if (mode === 'ecos-results') return 'ecos';
@@ -313,7 +318,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
-  const [nvidiaModel, setNvidiaModel] = useState(() => localStorage.getItem('nvidia_model') || 'z-ai/glm-4.7');
+  const [nvidiaModel, setNvidiaModel] = useState(() => normalizeNvidiaModel(localStorage.getItem('nvidia_model')));
   const [aiServiceProviders, setAiServiceProviders] = useState(() => {
     try {
       return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
@@ -1793,8 +1798,9 @@ Contraintes :
     try { localStorage.setItem('nvidia_backend_enabled', String(v)); } catch {}
   };
   const persistNvidiaModel = (m) => {
-    setNvidiaModel(m);
-    try { localStorage.setItem('nvidia_model', m); } catch {}
+    const normalized = normalizeNvidiaModel(m);
+    setNvidiaModel(normalized);
+    try { localStorage.setItem('nvidia_model', normalized); } catch {}
   };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
@@ -3282,7 +3288,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 <span className="text-sm">Activer NVIDIA via backend</span>
               </label>
               <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele NVIDIA</label>
-              <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full mb-3" placeholder="z-ai/glm-4.7" />
+              <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full mb-3" placeholder="z-ai/glm4.7" />
               <div className="grid md:grid-cols-2 gap-3">
                 {AI_SERVICES.map(svc => (
                   <label key={svc.key} className="text-xs">
