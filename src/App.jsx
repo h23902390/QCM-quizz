@@ -3109,6 +3109,25 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         .btn-danger { background: #b32f24 !important; }
         .btn-danger:hover:not(:disabled) { background: #d93025 !important; box-shadow: 0 6px 16px -4px rgba(217,48,37,0.32) !important; }
 
+        /* ---------- List cards (sidebar lists) ---------- */
+        .list-card {
+          position: relative; padding: 12px 14px 12px 16px;
+          border: 1px solid var(--c-line);
+          border-radius: var(--r-sm);
+          background: var(--c-bg);
+          transition: border-color var(--d-fast) var(--ease-out-quart),
+                      transform var(--d-fast) var(--ease-out-quart),
+                      box-shadow var(--d-fast) var(--ease-out-quart);
+        }
+        .list-card::before {
+          content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+          width: 3px; border-radius: 2px;
+          background: var(--c-line);
+        }
+        .list-card:hover { border-color: var(--c-ink-mute); box-shadow: var(--shadow-card); }
+        .list-card--synthese::before { background: var(--c-accent); }
+        .list-card--flash::before    { background: #6b9d4d; }
+
         /* ---------- Empty states ---------- */
         .empty-state {
           display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -3296,6 +3315,55 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           transform: translateY(-2px);
           border-color: var(--c-ink-mute);
           box-shadow: var(--shadow-lift);
+        }
+
+        /* ---------- ECOS num + duration chip ---------- */
+        .ecos-num {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 10px; font-weight: 600;
+          color: var(--c-bg); background: var(--c-ink);
+          padding: 3px 8px; border-radius: var(--r-xs);
+          letter-spacing: 0.16em;
+        }
+        .ecos-duree {
+          display: inline-flex; align-items: center;
+          color: var(--c-ink-soft); letter-spacing: 0.12em;
+        }
+
+        /* ---------- Badges (statut, type) ---------- */
+        .badge {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 10px; font-weight: 600;
+          padding: 3px 8px; border-radius: var(--r-xs);
+          letter-spacing: 0.14em; text-transform: uppercase;
+          border: 1px solid transparent; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .badge--success { background: #e6f3e0; color: #2d5a1a; border-color: #c8dfbb; }
+        .badge--warning { background: #fef6dd; color: #7a5210; border-color: #ecd9a3; }
+        .badge--neutral { background: var(--c-surface); color: var(--c-ink-mute); border-color: var(--c-line); }
+        .badge--perso   { background: #fde8e0; color: #8a3a14; border-color: #f0c8b4; }
+        .badge--accent  { background: var(--c-accent-soft); color: var(--c-accent); border-color: rgba(26,111,212,0.22); }
+
+        /* ---------- Deck card (library) — couverture color ---------- */
+        .deck-card {
+          position: relative; overflow: hidden;
+          background: var(--c-bg);
+          border: 1px solid var(--c-line);
+          border-radius: var(--r-md);
+          padding: 20px 20px 16px;
+          transition: transform var(--d-base) var(--ease-out-quart),
+                      box-shadow var(--d-base) var(--ease-out-quart),
+                      border-color var(--d-base) var(--ease-out-quart);
+        }
+        .deck-card:hover { transform: translateY(-3px); border-color: var(--c-ink-mute); box-shadow: var(--shadow-lift); }
+        .deck-card-stripe {
+          position: absolute; top: 0; left: 0; right: 0; height: 56px;
+          opacity: 0.55; pointer-events: none; z-index: 0;
+        }
+        .deck-card > * { position: relative; z-index: 1; }
+        .deck-num {
+          color: #fff; padding: 3px 8px; border-radius: var(--r-xs);
+          letter-spacing: 0.16em; font-weight: 600;
         }
 
         /* ---------- Premium : section macro-spacing ---------- */
@@ -3770,17 +3838,23 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 </div>
                 {!session && <p className="text-xs mb-3" style={{ color: 'var(--c-ink-soft)' }}>Connecte-toi pour synchroniser les fiches.</p>}
                 <div className="space-y-2">
-                  {studySheetRows.slice(0, 8).map(s => (
-                    <div key={s.id} className="p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
-                      <div className="text-sm" style={{ fontWeight: 600 }}>{s.title}</div>
-                      <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>{new Date(s.created_at).toLocaleDateString('fr-FR')}</div>
-                      <div className="flex gap-2 mt-3">
+                  {studySheetRows.slice(0, 8).map(s => {
+                    const nbSections = (s.data?.sections || []).length;
+                    return (
+                    <div key={s.id} className="list-card list-card--synthese">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="text-sm flex-1 min-w-0" style={{ fontWeight: 600 }}>{s.title}</div>
+                        {nbSections > 0 && <span className="badge badge--accent flex-shrink-0">{nbSections} §</span>}
+                      </div>
+                      <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-ink-mute)' }}>{new Date(s.created_at).toLocaleDateString('fr-FR')}</div>
+                      <div className="flex flex-wrap gap-2">
                         <button onClick={() => openStudySheet(s)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
                         <button onClick={() => generateFlashcardsFromSheet(s)} className="btn-secondary px-3 py-1.5 text-xs">Flashcards</button>
                         <button onClick={() => removeStudySheet(s.id)} className="btn-secondary px-3 py-1.5 text-xs">Suppr.</button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {studySheetRows.length === 0 && (
                     <div className="empty-state">
                       <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -3949,17 +4023,31 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{flashcardRows.length}</span>
                 </div>
                 <div className="space-y-2">
-                  {flashcardRows.slice(0, 8).map(row => (
-                    <div key={row.id} className="p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
-                      <div className="text-sm" style={{ fontWeight: 600 }}>{row.title}</div>
-                      <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>{row.data?.cards?.length || 0} cartes</div>
-                      <div className="flex gap-2 mt-3">
+                  {flashcardRows.slice(0, 8).map(row => {
+                    const nbCards = row.data?.cards?.length || 0;
+                    return (
+                    <div key={row.id} className="list-card list-card--flash">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <div className="text-sm flex-1 min-w-0" style={{ fontWeight: 600 }}>{row.title}</div>
+                        <span className="badge badge--success flex-shrink-0">{nbCards} cartes</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-3">
                         <button onClick={() => openFlashcardSet(row)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
                         <button onClick={() => removeStudySheet(row.id)} className="btn-secondary px-3 py-1.5 text-xs">Suppr.</button>
                       </div>
                     </div>
-                  ))}
-                  {flashcardRows.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucun set sauvegarde pour l'instant.</p>}
+                    );
+                  })}
+                  {flashcardRows.length === 0 && (
+                    <div className="empty-state">
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="3" y="6" width="14" height="12" rx="2"/>
+                        <path d="M21 10v8a2 2 0 0 1-2 2H8"/>
+                      </svg>
+                      <p className="text-xs mt-3" style={{ color: 'var(--c-ink-mute)' }}>Aucun set pour l'instant.</p>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>Crée un set depuis une fiche.</p>
+                    </div>
+                  )}
                 </div>
               </aside>
               <aside className="surface p-5">
@@ -4284,29 +4372,27 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 const num = String(idx + 1).padStart(2, '0');
                 return (
                   <div key={c.id} className="ecos-card relative" onClick={() => startEcos(c)}>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{num}</span>
-                      <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>{c.duree} MIN</span>
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <span className="ecos-num">{num}</span>
+                      <span className="mono text-[10px] ecos-duree">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: 4 }}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        {c.duree} MIN
+                      </span>
                     </div>
-                    <div className="display text-base mb-2" style={{ fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.01em' }}>{c.titre}</div>
-                    <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-accent)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>{c.specialite}</div>
+                    <div className="mono text-[10px] mb-2" style={{ color: 'var(--c-accent)', letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600 }}>{c.specialite}</div>
+                    <div className="display mb-3" style={{ fontWeight: 600, fontSize: '17px', lineHeight: 1.25, letterSpacing: '-0.01em' }}>{c.titre}</div>
                     <div className="text-xs" style={{ color: 'var(--c-ink-soft)' }}>
                       {(c.grilleCorrection || []).length} items · {points} pts
                     </div>
                     {(inProgress || finished || isCustom) && (
-                      <div className="mt-3 pt-3 flex flex-wrap gap-2 items-center" style={{ borderTop: '1px solid var(--c-line)' }}>
+                      <div className="mt-4 pt-3 flex flex-wrap gap-2 items-center" style={{ borderTop: '1px solid var(--c-line)' }}>
                         {inProgress && (
-                          <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#fff8e0', color: '#5a4a10', border: '1px solid #c4a84d', letterSpacing: '0.1em' }}>EN COURS</span>
+                          <span className="badge badge--warning">● EN COURS</span>
                         )}
                         {finished && (
-                          <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f', letterSpacing: '0.1em' }}>FAIT</span>
+                          <span className="badge badge--success">FAIT</span>
                         )}
-                        <span className="mono text-[10px] px-2 py-0.5" style={{
-                          background: isCustom ? '#fff0d6' : 'var(--c-bg)',
-                          color: isCustom ? '#7a5210' : 'var(--c-ink-mute)',
-                          border: '1px solid ' + (isCustom ? '#dfc88a' : 'var(--c-line)'),
-                          letterSpacing: '0.1em',
-                        }}>{isCustom ? 'PERSO' : 'FAC'}</span>
+                        <span className={isCustom ? 'badge badge--perso' : 'badge badge--neutral'}>{isCustom ? 'PERSO' : 'FAC'}</span>
                         {isCustom && (
                           <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
                             className="ml-auto text-xs underline" style={{ color: 'var(--c-accent)' }}>Supprimer</button>
@@ -4695,10 +4781,16 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   const qs = d.questions || [];
                   const favCount = qs.filter(q => q.favorite).length;
                   const num = String(idx + 1).padStart(2, '0');
+                  const hue = (() => {
+                    const s = String(d.id || d.name || '');
+                    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+                    return Math.abs(h) % 360;
+                  })();
                   return (
-                    <div key={d.id} className="ecos-card" style={{ cursor: 'default' }}>
+                    <div key={d.id} className="deck-card" style={{ cursor: 'default' }}>
+                      <div className="deck-card-stripe" aria-hidden="true" style={{ background: `linear-gradient(135deg, hsl(${hue} 60% 92%), hsl(${(hue + 30) % 360} 60% 96%))` }} />
                       <div className="flex items-start justify-between gap-3 mb-3">
-                        <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{num}</span>
+                        <span className="mono text-[10px] deck-num" style={{ background: `hsl(${hue} 65% 35%)` }}>{num}</span>
                         <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>
                           {new Date(d.created_at).toLocaleDateString('fr-FR')}
                         </span>
