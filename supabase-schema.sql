@@ -27,6 +27,35 @@ create policy "decks_owner_delete" on public.decks
 create index if not exists decks_user_created_idx
   on public.decks (user_id, created_at desc);
 
+-- ---------- Fiches synthese ----------
+create table if not exists public.study_sheets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),
+  title text not null,
+  source_name text,
+  data jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.study_sheets enable row level security;
+
+drop policy if exists "study_sheets_owner_select" on public.study_sheets;
+drop policy if exists "study_sheets_owner_insert" on public.study_sheets;
+drop policy if exists "study_sheets_owner_update" on public.study_sheets;
+drop policy if exists "study_sheets_owner_delete" on public.study_sheets;
+
+create policy "study_sheets_owner_select" on public.study_sheets
+  for select using (auth.uid() = user_id);
+create policy "study_sheets_owner_insert" on public.study_sheets
+  for insert with check (auth.uid() = user_id);
+create policy "study_sheets_owner_update" on public.study_sheets
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "study_sheets_owner_delete" on public.study_sheets
+  for delete using (auth.uid() = user_id);
+
+create index if not exists study_sheets_user_created_idx
+  on public.study_sheets (user_id, created_at desc);
+
 -- ---------- ECOS cases (synchro multi-appareils) ----------
 create table if not exists public.ecos_cases (
   user_id uuid references auth.users(id) on delete cascade not null default auth.uid(),

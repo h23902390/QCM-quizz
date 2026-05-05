@@ -36,6 +36,31 @@ export async function deleteDeck(id) {
   if (error) throw error;
 }
 
+// ---------- Fiches synthese ----------
+export async function listStudySheets() {
+  const { data, error } = await supabase
+    .from('study_sheets')
+    .select('id, title, source_name, data, created_at')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveStudySheet(title, sourceName, data) {
+  const { data: row, error } = await supabase
+    .from('study_sheets')
+    .insert({ title, source_name: sourceName || null, data })
+    .select()
+    .single();
+  if (error) throw error;
+  return row;
+}
+
+export async function deleteStudySheet(id) {
+  const { error } = await supabase.from('study_sheets').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // ---------- ECOS cases ----------
 export async function listEcosCases() {
   const { data, error } = await supabase

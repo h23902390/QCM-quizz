@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   supabase, supabaseEnabled,
   listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
+  listStudySheets, saveStudySheet, deleteStudySheet,
   listEcosCases, upsertEcosCases, deleteEcosCase as deleteEcosCaseRemote,
   listEcosAttempts, upsertEcosAttempt,
   uploadEntretien, listEntretiens, updateEntretien, deleteEntretien,
@@ -300,6 +301,20 @@ export default function App() {
   const [decks, setDecks] = useState([]);
   const [currentDeckId, setCurrentDeckId] = useState(null);
   const [savingDeck, setSavingDeck] = useState(false);
+  const [studySheets, setStudySheets] = useState([]);
+  const [sheetFileName, setSheetFileName] = useState('');
+  const [sheetProcessing, setSheetProcessing] = useState(false);
+  const [sheetError, setSheetError] = useState(null);
+  const [sheetResult, setSheetResult] = useState(null);
+  const [savingSheet, setSavingSheet] = useState(false);
+  const sheetInputRef = useRef(null);
+  const [qcmGenFileName, setQcmGenFileName] = useState('');
+  const [qcmGenCount, setQcmGenCount] = useState(20);
+  const [qcmGenLevel, setQcmGenLevel] = useState('externat');
+  const [qcmGenProcessing, setQcmGenProcessing] = useState(false);
+  const [qcmGenError, setQcmGenError] = useState(null);
+  const [qcmGenSaved, setQcmGenSaved] = useState(false);
+  const qcmGenInputRef = useRef(null);
 
   // ---------- ECOS state ----------
   const [ecosCase, setEcosCase] = useState(null); // cas sélectionné
@@ -1270,6 +1285,177 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     return out.join('\n\n');
   };
 
+  const callOpenAIJson = async ({ system, user, temp = 0.2 }) => {
+    if (!apiKey) throw new Error('Configure ta cle API OpenAI dans les Reglages.');
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: temp,
+      }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    return JSON.parse(data.choices?.[0]?.message?.content || '{}');
+  };
+
+  const generateStudySheetFromPdf = async (file) => {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name)) { setSheetError('PDF requis.'); return; }
+    if (!libsReady) { setSheetError('Bibliotheques PDF en cours de chargement, reessaie.'); return; }
+    setSheetError(null);
+    setSheetResult(null);
+    setSheetFileName(file.name);
+    setSheetProcessing(true);
+    try {
+      const text = await extractPdfTextFromFile(file);
+      const parsed = await callOpenAIJson({
+        temp: 0.15,
+        system: `Tu es un enseignant de medecine. Tu transformes un cours brut en fiche de revision belle, structuree, tres utile pour l'externat.
+Reponds STRICTEMENT en JSON :
+{
+  "title": "titre court",
+  "subtitle": "angle de la fiche",
+  "takeaways": ["5-8 points majeurs"],
+  "sections": [{"title":"...", "bullets":["..."]}],
+  "redFlags": ["signes de gravite / pieges"],
+  "examTraps": ["pieges de QCM / confusion frequente"],
+  "miniAlgorithm": ["etape 1", "etape 2", "..."],
+  "keywords": ["mot-cle", "..."]
+}
+Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d'invention hors du cours sauf rappel medical standard clairement utile.`,
+        user: `Nom du fichier : ${file.name}\n\nTexte du cours :\n${text.slice(0, 45000)}`,
+      });
+      const sheet = {
+        title: parsed.title || file.name.replace(/\.pdf$/i, ''),
+        subtitle: parsed.subtitle || '',
+        takeaways: Array.isArray(parsed.takeaways) ? parsed.takeaways : [],
+        sections: Array.isArray(parsed.sections) ? parsed.sections : [],
+        redFlags: Array.isArray(parsed.redFlags) ? parsed.redFlags : [],
+        examTraps: Array.isArray(parsed.examTraps) ? parsed.examTraps : [],
+        miniAlgorithm: Array.isArray(parsed.miniAlgorithm) ? parsed.miniAlgorithm : [],
+        keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+        sourceName: file.name,
+        generatedAt: new Date().toISOString(),
+      };
+      setSheetResult(sheet);
+      if (session) {
+        const row = await saveStudySheet(sheet.title, file.name, sheet);
+        setStudySheets(s => [{ ...row }, ...s]);
+      }
+    } catch (e) {
+      setSheetError('Generation impossible : ' + e.message);
+    } finally {
+      setSheetProcessing(false);
+      if (sheetInputRef.current) sheetInputRef.current.value = '';
+    }
+  };
+
+  const saveCurrentStudySheet = async () => {
+    if (!sheetResult) return;
+    if (!session) { setShowAuth(true); return; }
+    setSavingSheet(true);
+    try {
+      const row = await saveStudySheet(sheetResult.title, sheetResult.sourceName, sheetResult);
+      setStudySheets(s => [{ ...row }, ...s]);
+    } catch (e) {
+      setSheetError('Sauvegarde impossible : ' + e.message);
+    } finally {
+      setSavingSheet(false);
+    }
+  };
+
+  const removeStudySheet = async (id) => {
+    if (!confirm('Supprimer cette fiche ?')) return;
+    try {
+      await deleteStudySheet(id);
+      setStudySheets(s => s.filter(x => x.id !== id));
+    } catch (e) {
+      alert('Suppression impossible : ' + e.message);
+    }
+  };
+
+  const openStudySheet = (row) => {
+    setSheetResult(row.data);
+    setSheetFileName(row.source_name || row.data?.sourceName || '');
+    setMode('synthese');
+  };
+
+  const generateQcmDeckFromPdf = async (file) => {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name)) { setQcmGenError('PDF requis.'); return; }
+    if (!libsReady) { setQcmGenError('Bibliotheques PDF en cours de chargement, reessaie.'); return; }
+    setQcmGenError(null);
+    setQcmGenFileName(file.name);
+    setQcmGenProcessing(true);
+    setQcmGenSaved(false);
+    try {
+      const text = await extractPdfTextFromFile(file);
+      const parsed = await callOpenAIJson({
+        temp: 0.25,
+        system: `Tu es un concepteur de QCM de medecine pour l'externat.
+Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
+{
+  "title": "titre court du deck",
+  "questions": [
+    {
+      "enonce": "question",
+      "options": [{"letter":"A","text":"...", "correct":true}],
+      "explanation": "correction courte"
+    }
+  ]
+}
+Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possibles, formulations type examen, pas de QROC, pas d'informations non deductibles du cours.`,
+        user: `Niveau : ${qcmGenLevel}\nNombre de QCM : ${qcmGenCount}\nFichier : ${file.name}\n\nCours :\n${text.slice(0, 45000)}`,
+      });
+      const title = parsed.title || file.name.replace(/\.pdf$/i, '');
+      const generated = (Array.isArray(parsed.questions) ? parsed.questions : []).map((q, idx) => ({
+        id: `gen-${Date.now()}-${idx}`,
+        pageNum: '-',
+        type: 'qcm',
+        context: q.explanation ? `Correction : ${q.explanation}` : '',
+        enonce: q.enonce || `Question ${idx + 1}`,
+        options: (Array.isArray(q.options) ? q.options : []).slice(0, 5).map((o, oi) => ({
+          letter: String(o.letter || 'ABCDE'[oi] || String.fromCharCode(65 + oi)).toUpperCase().slice(0, 1),
+          text: o.text || '',
+          correct: !!o.correct,
+        })).filter(o => o.text),
+        imageDataUrl: null,
+        detectionError: false,
+        hasNoCorrect: !(q.options || []).some(o => o.correct),
+        generatedByAI: true,
+        sourceName: file.name,
+      })).filter(q => q.options.length >= 2);
+      if (!generated.length) throw new Error('Aucun QCM exploitable renvoye par l\'IA.');
+      setQuestions(generated);
+      setPages([]);
+      setResults([]);
+      setFilename(title);
+      setCurrentDeckId(null);
+      if (session) {
+        const deck = await saveDeck(`IA - ${title}`, generated);
+        setCurrentDeckId(deck.id);
+        setDecks(d => [{ id: deck.id, name: deck.name, created_at: deck.created_at, questions: generated }, ...d]);
+        setQcmGenSaved(true);
+      }
+      setMode('extract');
+    } catch (e) {
+      setQcmGenError('Generation impossible : ' + e.message);
+    } finally {
+      setQcmGenProcessing(false);
+      if (qcmGenInputRef.current) qcmGenInputRef.current.value = '';
+    }
+  };
+
   const convertRawToCaseViaGPT = async (rawText, sourceLabel) => {
     if (!apiKey) throw new Error('Configure ta clé API OpenAI dans les Réglages.');
     const sys = `Tu transformes une grille ECOS extraite d'un PDF (texte brut, parfois bruité) en un objet JSON STRICT conforme au format suivant, utilisé par une application de simulation médicale :
@@ -1427,7 +1613,7 @@ Contraintes :
 
   // À la connexion: charge la clé API depuis user metadata + la liste des decks
   useEffect(() => {
-    if (!session) { setDecks([]); return; }
+    if (!session) { setDecks([]); setStudySheets([]); return; }
     // Refresh user from server pour avoir la dernière clé API (sync multi-appareils)
     supabase.auth.getUser().then(({ data }) => {
       const meta = data?.user?.user_metadata || session.user?.user_metadata || {};
@@ -1452,6 +1638,7 @@ Contraintes :
       }
     }).catch(e => console.warn('getUser', e));
     listDecks().then(setDecks).catch(e => console.warn('listDecks', e));
+    listStudySheets().then(setStudySheets).catch(e => console.warn('listStudySheets', e));
     // Synchro ECOS : fusion local <-> Supabase
     (async () => {
       try {
@@ -2139,6 +2326,16 @@ Contraintes :
     }
     setFeedback(fb);
     setResults(r => [...r, { question: q, userAnswer, feedback: fb }]);
+    const answeredAt = new Date().toISOString();
+    const withAttempt = (item) => item.id === q.id
+      ? { ...item, lastAttempt: { answeredAt, verdict: fb.verdict, score: fb.score, userValue: fb.userValue || '' } }
+      : item;
+    setQuestions(qs => {
+      const next = qs.map(withAttempt);
+      persistQuestionsRemote(next);
+      return next;
+    });
+    setQuizQuestions(qs => qs.map(withAttempt));
   };
 
   const nextQuestion = () => {
@@ -2746,6 +2943,8 @@ Contraintes :
           tabs={[
             { key: 'home', label: 'Accueil' },
             { key: 'qcm', label: 'QCM / QROC' },
+            { key: 'synthese', label: 'Fiches synthÃ¨se' },
+            { key: 'qcmgen', label: 'GÃ©nÃ©rateur QCM' },
             { key: 'ecos', label: 'ECOS' },
             { key: 'analyse', label: 'Analyse partiels' },
             { key: 'entretien', label: 'Entretien' },
@@ -2753,6 +2952,8 @@ Contraintes :
           activeKey={
             mode === 'home' ? 'home'
             : mode === 'ecos' || mode === 'ecos-results' ? 'ecos'
+            : mode === 'synthese' ? 'synthese'
+            : mode === 'qcmgen' ? 'qcmgen'
             : mode === 'analyse' ? 'analyse'
             : mode === 'entretien' ? 'entretien'
             : 'qcm'
@@ -2762,6 +2963,10 @@ Contraintes :
               setMode('home');
             } else if (key === 'qcm') {
               if (mode !== 'qcm' && mode !== 'extract' && mode !== 'quiz' && mode !== 'results' && mode !== 'library') reset();
+            } else if (key === 'synthese') {
+              if (mode !== 'synthese') setMode('synthese');
+            } else if (key === 'qcmgen') {
+              if (mode !== 'qcmgen') setMode('qcmgen');
             } else if (key === 'ecos') {
               if (mode !== 'ecos') setMode('ecos');
             } else if (key === 'analyse') {
@@ -2875,7 +3080,7 @@ Contraintes :
                   fontWeight: 600, fontSize: 'clamp(40px, 7vw, 88px)',
                   lineHeight: 1.0, letterSpacing: '-0.035em',
                 }}>
-                  Quatre outils,<br />
+                  Six outils,<br />
                   <span style={{ color: 'var(--c-ink-soft)' }}>une seule discipline.</span>
                 </span>
               </Reveal>
@@ -2889,17 +3094,19 @@ Contraintes :
 
             <div className="section-divider" />
 
-            {/* Les 4 outils */}
+            {/* Les 6 outils */}
             <section>
               <Reveal>
                 <Eyebrow>Sommaire</Eyebrow>
               </Reveal>
               <div className="grid md:grid-cols-2 gap-5 mt-8">
                 {[
-                  { n: '01', k: 'qcm', t: 'QCM / QROC', d: 'Extraction d\'un PDF de cours corrigé, génération automatique d\'un quiz, sauvegarde des decks et des favoris.' },
-                  { n: '02', k: 'ecos', t: 'ECOS', d: 'Patient simulé par IA, dictée vocale, notation détaillée /20 par section. 132 cas Fac intégrés + import PDF.' },
-                  { n: '03', k: 'analyse', t: 'Analyse partiels', d: 'Lecture rapide de tes partiels passés, repérage des questions récurrentes et des pièges.' },
-                  { n: '04', k: 'entretien', t: 'Entretien', d: 'Dossier patient → entretien guidé. Anamnèse, examen, hypothèses, restitution écrite.' },
+                  { n: '01', k: 'qcm', t: 'QCM / QROC', d: "Extraction d'un PDF de cours corrige, generation automatique d'un quiz, sauvegarde des decks et des favoris." },
+                  { n: '02', k: 'synthese', t: 'Fiches synthese', d: 'PDF de cours vers fiche visuelle : points majeurs, algorithme, pieges, signes de gravite et mots-cles.' },
+                  { n: '03', k: 'qcmgen', t: 'Generateur QCM', d: 'PDF de cours vers QCM inedits, directement jouables et sauvegardables en deck, sans stocker le PDF.' },
+                  { n: '04', k: 'ecos', t: 'ECOS', d: 'Patient simule par IA, dictee vocale, notation detaillee /20 par section. 132 cas Fac integres + import PDF.' },
+                  { n: '05', k: 'analyse', t: 'Analyse partiels', d: 'Lecture rapide de tes partiels passes, reperage des questions recurrentes et des pieges.' },
+                  { n: '06', k: 'entretien', t: 'Entretien', d: 'Dossier patient vers entretien guide. Anamnese, examen, hypotheses, restitution ecrite.' },
                 ].map((c, i) => (
                   <Reveal key={c.k} delay={80 + i * 80}>
                     <div
@@ -2941,6 +3148,145 @@ Contraintes :
                 Atelier personnel · Hugo Bette · {new Date().getFullYear()}
               </p>
             </Reveal>
+          </>
+        )}
+
+        {mode === 'synthese' && (
+          <>
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)' }}>
+              <Reveal><Eyebrow>Outil 02 / Fiche synthese</Eyebrow></Reveal>
+              <Reveal delay={80} as="h1">
+                <span className="display block mt-5" style={{ fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)', lineHeight: 1.02, letterSpacing: '-0.03em' }}>
+                  Un cours dense,<br /><span style={{ color: 'var(--c-ink-soft)' }}>une fiche lisible.</span>
+                </span>
+              </Reveal>
+              <Reveal delay={150}>
+                <p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>
+                  Depose un PDF : l'IA garde l'essentiel, les pieges, les signes de gravite et un mini-algorithme. Seule la fiche est sauvegardee, jamais le PDF.
+                </p>
+              </Reveal>
+            </section>
+
+            <div className="grid lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2">
+                <div className="bezel cursor-pointer" onClick={() => sheetInputRef.current?.click()} style={{ display: 'block' }}>
+                  <div className="bezel-inner text-center" style={{ padding: 'clamp(42px, 6vw, 78px) 28px' }}>
+                    <input ref={sheetInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => generateStudySheetFromPdf(e.target.files?.[0])} />
+                    <Eyebrow accent>{sheetProcessing ? 'Generation' : 'PDF de cours'}</Eyebrow>
+                    <div className="display mt-4" style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: 600 }}>
+                      {sheetProcessing ? 'Construction de la fiche...' : 'Creer une fiche synthese'}
+                    </div>
+                    <div className="text-sm mt-2" style={{ color: 'var(--c-ink-soft)' }}>
+                      {sheetFileName || 'Points cles, algorithme, pieges, mots-cles'}
+                    </div>
+                    {sheetError && <div className="text-sm mt-4" style={{ color: 'var(--c-accent)' }}>{sheetError}</div>}
+                  </div>
+                </div>
+              </div>
+              <aside className="surface p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <Eyebrow>Fiches sauvegardees</Eyebrow>
+                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{studySheets.length}</span>
+                </div>
+                {!session && <p className="text-xs mb-3" style={{ color: 'var(--c-ink-soft)' }}>Connecte-toi pour synchroniser les fiches.</p>}
+                <div className="space-y-2">
+                  {studySheets.slice(0, 8).map(s => (
+                    <div key={s.id} className="p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
+                      <div className="text-sm" style={{ fontWeight: 600 }}>{s.title}</div>
+                      <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>{new Date(s.created_at).toLocaleDateString('fr-FR')}</div>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => openStudySheet(s)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
+                        <button onClick={() => removeStudySheet(s.id)} className="btn-secondary px-3 py-1.5 text-xs">Suppr.</button>
+                      </div>
+                    </div>
+                  ))}
+                  {studySheets.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucune fiche pour l'instant.</p>}
+                </div>
+              </aside>
+            </div>
+
+            {sheetResult && (
+              <section className="mt-10">
+                <div className="bezel" style={{ display: 'block' }}>
+                  <div className="bezel-inner" style={{ padding: 'clamp(28px, 4vw, 48px)' }}>
+                    <div className="flex flex-wrap justify-between gap-4 mb-8">
+                      <div>
+                        <Eyebrow accent>{sheetResult.sourceName || sheetFileName}</Eyebrow>
+                        <h2 className="display mt-4" style={{ fontSize: 'clamp(34px, 5vw, 64px)', lineHeight: 1, fontWeight: 600 }}>{sheetResult.title}</h2>
+                        {sheetResult.subtitle && <p className="mt-3 text-sm" style={{ color: 'var(--c-ink-soft)' }}>{sheetResult.subtitle}</p>}
+                      </div>
+                      <button onClick={saveCurrentStudySheet} disabled={savingSheet || !sheetResult} className="btn-secondary px-4 py-2 text-sm self-start">
+                        <IconSave size={13} /> {savingSheet ? 'Sauvegarde...' : session ? 'Sauvegarder' : 'Sauvegarder (connexion)'}
+                      </button>
+                    </div>
+                    <div className="grid md:grid-cols-3 gap-4 mb-8">
+                      {(sheetResult.takeaways || []).slice(0, 6).map((t, i) => (
+                        <div key={i} className="p-4" style={{ border: '1px solid var(--c-line)', background: 'var(--c-bg)', borderRadius: 'var(--r-md)' }}>
+                          <div className="mono text-[10px] mb-2" style={{ color: 'var(--c-accent)', letterSpacing: '0.16em' }}>{String(i + 1).padStart(2, '0')}</div>
+                          <div className="text-sm" style={{ lineHeight: 1.5 }}>{t}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid lg:grid-cols-3 gap-6">
+                      <div className="lg:col-span-2 space-y-5">
+                        {(sheetResult.sections || []).map((sec, i) => (
+                          <div key={i}>
+                            <h3 className="display text-xl mb-3" style={{ fontWeight: 600 }}>{sec.title}</h3>
+                            <ul className="space-y-2 text-sm" style={{ lineHeight: 1.55 }}>
+                              {(sec.bullets || []).map((b, bi) => <li key={bi}>- {b}</li>)}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-4">
+                        {sheetResult.miniAlgorithm?.length > 0 && <div className="p-4" style={{ background: '#e6f3e0', border: '1px solid #9ec28f', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">ALGORITHME</div>{sheetResult.miniAlgorithm.map((x, i) => <div key={i} className="text-sm mb-2">{i + 1}. {x}</div>)}</div>}
+                        {sheetResult.redFlags?.length > 0 && <div className="p-4" style={{ background: '#f8e0d6', border: '1px solid #dfa493', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">SIGNES DE GRAVITE</div>{sheetResult.redFlags.map((x, i) => <div key={i} className="text-sm mb-2">- {x}</div>)}</div>}
+                        {sheetResult.examTraps?.length > 0 && <div className="p-4" style={{ background: '#fff8e0', border: '1px solid #c4a84d', borderRadius: 'var(--r-md)' }}><div className="mono text-[10px] mb-3">PIEGES QCM</div>{sheetResult.examTraps.map((x, i) => <div key={i} className="text-sm mb-2">- {x}</div>)}</div>}
+                        {sheetResult.keywords?.length > 0 && <div className="flex flex-wrap gap-2">{sheetResult.keywords.map((k, i) => <span key={i} className="pill pill-qroc">{k}</span>)}</div>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        {mode === 'qcmgen' && (
+          <>
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)' }}>
+              <Reveal><Eyebrow>Outil 03 / Generation IA</Eyebrow></Reveal>
+              <Reveal delay={80} as="h1">
+                <span className="display block mt-5" style={{ fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)', lineHeight: 1.02, letterSpacing: '-0.03em' }}>
+                  Ton PDF,<br /><span style={{ color: 'var(--c-ink-soft)' }}>en QCM inedits.</span>
+                </span>
+              </Reveal>
+              <Reveal delay={150}><p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>Choisis le nombre de questions, depose un cours, puis revise le deck genere. Les questions sont sauvegardees, pas le PDF.</p></Reveal>
+            </section>
+            <div className="grid lg:grid-cols-3 gap-5">
+              <div className="surface p-5">
+                <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-ink-mute)' }}>Nombre de QCM</label>
+                <input type="number" min="5" max="60" value={qcmGenCount} onChange={e => setQcmGenCount(Math.max(5, Math.min(60, Number(e.target.value) || 20)))} className="input-field w-full mb-4" />
+                <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-ink-mute)' }}>Niveau</label>
+                <select value={qcmGenLevel} onChange={e => setQcmGenLevel(e.target.value)} className="input-field w-full">
+                  <option value="externat">Externat</option>
+                  <option value="difficile">Difficile / piegeux</option>
+                  <option value="rattrapage">Rattrapage rapide</option>
+                </select>
+              </div>
+              <div className="lg:col-span-2">
+                <div className="bezel cursor-pointer" onClick={() => qcmGenInputRef.current?.click()} style={{ display: 'block' }}>
+                  <div className="bezel-inner text-center" style={{ padding: 'clamp(46px, 7vw, 92px) 28px' }}>
+                    <input ref={qcmGenInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => generateQcmDeckFromPdf(e.target.files?.[0])} />
+                    <Eyebrow accent>{qcmGenProcessing ? 'Generation' : 'PDF de cours'}</Eyebrow>
+                    <div className="display mt-4" style={{ fontSize: 'clamp(24px, 3vw, 36px)', fontWeight: 600 }}>{qcmGenProcessing ? 'Creation du deck...' : 'Generer les QCM'}</div>
+                    <div className="text-sm mt-2" style={{ color: 'var(--c-ink-soft)' }}>{qcmGenFileName || `${qcmGenCount} QCM - ${qcmGenLevel}`}</div>
+                    {qcmGenSaved && <div className="mono text-[10px] mt-4" style={{ color: '#2d5a1a' }}>Deck sauvegarde automatiquement</div>}
+                    {qcmGenError && <div className="text-sm mt-4" style={{ color: 'var(--c-accent)' }}>{qcmGenError}</div>}
+                  </div>
+                </div>
+              </div>
+            </div>
           </>
         )}
 
@@ -4411,7 +4757,7 @@ Contraintes :
       {mode !== 'analyse' && mode !== 'entretien' && (
         <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#8a8a8a', borderColor: '#d6d0c1' }}>
           Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
-          Les PDF ne quittent jamais ta machine.
+          Les PDF ne sont jamais stockes ; pour les outils IA, seul le texte extrait est envoye a OpenAI.
         </footer>
       )}
     </div>

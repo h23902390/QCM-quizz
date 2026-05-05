@@ -414,11 +414,28 @@ const fi=x=>x==null||(typeof x==='number'&&isNaN(x))?'—':Math.round(x).toLocal
 const fp=x=>x==null||isNaN(x)?'—':`${x.toFixed(1).replace('.',',')} %`;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-const S={fileName:'',headers:[],rawBody:null,idColIdx:0,subjects:[],rows:null,excluded:new Set(),subStats:{},overall:null,scaleMax:20,tabsCount:1,activeTab:0,ids:['',''],generated:false,stu1:null,stu2:null,selSub:null,reportDate:null};
+const S={fileName:'',headers:[],rawBody:null,idColIdx:0,subjects:[],rows:null,excluded:new Set(),subStats:{},overall:null,scaleMax:20,sourceScale:20,tabsCount:1,activeTab:0,ids:['',''],generated:false,stu1:null,stu2:null,selSub:null,reportDate:null};
 
-function parseBody(body,hdrs,idCol){
+function rawScale(body,hdrs,idCol){
+  let mx=20;
+  for(let r of body){
+    for(let c=0;c<hdrs.length;c++){
+      if(c===idCol)continue;
+      const v=r?.[c];
+      if(typeof v==='number'&&Number.isFinite(v))mx=Math.max(mx,v);
+    }
+  }
+  return mx>25?100:20;
+}
+function normalizeGrade(v,sourceScale,targetScale){
+  if(typeof v!=='number'||isNaN(v))return null;
+  if(sourceScale===targetScale)return v;
+  return v*targetScale/sourceScale;
+}
+function parseBody(body,hdrs,idCol,targetScale=20,sourceScale=null){
+  const src=sourceScale||rawScale(body,hdrs,idCol);
   const subs=hdrs.map((h,i)=>({name:h||`Col. ${i+1}`,idx:i})).filter(s=>s.idx!==idCol);
-  const students=body.map(r=>{const id=r?.[idCol];const grades={};for(const s of subs){const v=r?.[s.idx];grades[s.name]=(typeof v==='number'&&!isNaN(v))?v:null;}return{id:id==null?'':String(id).trim(),grades};}).filter(s=>s.id!=='');
+  const students=body.map(r=>{const id=r?.[idCol];const grades={};for(const s of subs){const v=r?.[s.idx];grades[s.name]=normalizeGrade(v,src,targetScale);}return{id:id==null?'':String(id).trim(),grades};}).filter(s=>s.id!=='');
   return{subjects:subs.map(s=>s.name),students};
 }
 
@@ -513,9 +530,9 @@ async function handleFile(file){
     const body=all.slice(1);
     let det=0;
     for(let c=0;c<hdrs.length;c++){const vals=body.map(r=>r?.[c]).filter(v=>v!=null&&v!=='');if(!vals.length)continue;if(!vals.every(v=>typeof v==='number'&&v>=0&&v<=25)){det=c;break;}}
-    const{subjects:subs,students}=parseBody(body,hdrs,det);
-    let mx=20;for(const r of students)for(const v of Object.values(r.grades))if(typeof v==='number'&&v>mx)mx=v;
-    S.fileName=file.name;S.headers=hdrs;S.rawBody=body;S.idColIdx=det;S.subjects=subs;S.rows=students;S.excluded=new Set();S.scaleMax=mx>20?100:20;S.generated=false;S.selSub=subs[0]||null;
+    const src=rawScale(body,hdrs,det);
+    const{subjects:subs,students}=parseBody(body,hdrs,det,20,src);
+    S.fileName=file.name;S.headers=hdrs;S.rawBody=body;S.idColIdx=det;S.subjects=subs;S.rows=students;S.excluded=new Set();S.scaleMax=20;S.sourceScale=src;S.generated=false;S.selSub=subs[0]||null;
     recomp();renderAll();
   }catch(e){showErr(e.message||'Erreur de lecture.');S.rows=null;renderAll();}
 }
@@ -531,7 +548,7 @@ function recomp(){
 const findStu=id=>{if(!S.rows)return null;const q=(id||'').trim();if(!q)return null;const n=x=>String(x).replace(/\s/g,'');return S.rows.find(r=>r.id===q)||S.rows.find(r=>n(r.id)===n(q));};
 function toggleSub(s){S.excluded.has(s)?S.excluded.delete(s):S.excluded.add(s);S.generated=false;recomp();renderAll();}
 function setAll(on){S.excluded=on?new Set():new Set(S.subjects);S.generated=false;recomp();renderAll();}
-function chgIdCol(i){S.idColIdx=i;if(!S.rawBody)return;const{subjects:subs,students}=parseBody(S.rawBody,S.headers,i);S.subjects=subs;S.rows=students;S.excluded=new Set();S.selSub=subs[0]||null;S.generated=false;recomp();renderAll();}
+function chgIdCol(i){S.idColIdx=i;if(!S.rawBody)return;S.sourceScale=rawScale(S.rawBody,S.headers,i);const{subjects:subs,students}=parseBody(S.rawBody,S.headers,i,S.scaleMax,S.sourceScale);S.subjects=subs;S.rows=students;S.excluded=new Set();S.selSub=subs[0]||null;S.generated=false;recomp();renderAll();}
 function reset(){S.fileName='';S.headers=[];S.rawBody=null;S.subjects=[];S.rows=null;S.excluded=new Set();S.generated=false;S.ids=['',''];S.tabsCount=1;S.activeTab=0;showErr('');document.getElementById('fi').value='';renderAll();}
 
 function showErr(m){document.getElementById('errbox').innerHTML=m?`<div class="errbox" style="margin-top:16px;">⚠ ${esc(m)}</div>`:''}
@@ -823,7 +840,14 @@ function buildGauss(wrap,stats,g1,g2,sm){
 document.getElementById('fi').addEventListener('change',e=>handleFile(e.target.files?.[0]));
 document.getElementById('btnreload').addEventListener('click',reset);
 document.getElementById('idcolsel').addEventListener('change',e=>chgIdCol(Number(e.target.value)));
-document.querySelectorAll('#scaleseg button').forEach(b=>b.addEventListener('click',()=>{S.scaleMax=Number(b.dataset.v);S.generated=false;renderAll();}));
+document.querySelectorAll('#scaleseg button').forEach(b=>b.addEventListener('click',()=>{
+  S.scaleMax=Number(b.dataset.v);
+  if(S.rawBody){
+    const parsed=parseBody(S.rawBody,S.headers,S.idColIdx,S.scaleMax,S.sourceScale);
+    S.subjects=parsed.subjects;S.rows=parsed.students;recomp();
+  }
+  S.generated=false;renderAll();
+}));
 document.getElementById('btnallin').addEventListener('click',()=>setAll(true));
 document.getElementById('btnallout').addEventListener('click',()=>setAll(false));
 document.querySelectorAll('#idtabs .tab').forEach(t=>t.addEventListener('click',()=>{S.activeTab=Number(t.dataset.tab);S.generated=false;rIds();rResults();}));
