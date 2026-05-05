@@ -3409,45 +3409,63 @@ Contraintes :
         {mode === 'ecos-results' && ecosCase && ecosEvaluation && ecosScore && (
           <>
             {ecosScore.sur20 >= 18 && <Confetti />}
-            <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div className="mono text-xs mb-2 anim-fade-up" style={{ color: '#8a8a8a' }}>
-                {ecosCase.titre} · {ecosCase.specialite}
-              </div>
-              <div className="display text-5xl mb-2 score-reveal" style={{ fontWeight: 600 }}>
-                {ecosScore.sur20} / 20
-              </div>
-              <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
-                {ecosScore.obtenu} / {ecosScore.total} points · {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} %
-              </div>
-              <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-3">
-                <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
-                  className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
-                <button onClick={() => saveEcosSession('finished', { finishedAt: new Date().toISOString() })}
-                  className="btn-secondary px-4 py-2 text-sm"><IconSave size={12} /> Enregistrer la trace</button>
-                <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
-              </div>
-              {ecosSaveState && (
-                <div className="mono text-[10px] mt-3" style={{ color: '#8a8a8a' }}>
-                  {ecosSaveState}
+            {/* Hero score ECOS */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 72px)', paddingBottom: 'clamp(28px, 4vw, 56px)' }}>
+              <Reveal>
+                <Eyebrow accent>ECOS terminé · {ecosCase.specialite}</Eyebrow>
+              </Reveal>
+              <Reveal delay={80}>
+                <div className="mt-4 mono text-xs" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em', textTransform: 'uppercase' }}>{ecosCase.titre}</div>
+              </Reveal>
+              <Reveal delay={120}>
+                <div className="display score-reveal mt-6" style={{
+                  fontWeight: 600,
+                  fontSize: 'clamp(72px, 14vw, 180px)',
+                  lineHeight: 0.9,
+                  letterSpacing: '-0.045em',
+                }}>
+                  {ecosScore.sur20}<span style={{ color: 'var(--c-ink-mute)', fontWeight: 400 }}>/20</span>
                 </div>
-              )}
-            </div>
+              </Reveal>
+              <Reveal delay={180}>
+                <div className="mt-4 mono text-xs" style={{ color: 'var(--c-ink-soft)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                  {ecosScore.obtenu} / {ecosScore.total} points · {Math.round((ecosScore.obtenu / ecosScore.total) * 100)} % réussite
+                </div>
+              </Reveal>
+              <Reveal delay={240}>
+                <div className="flex flex-wrap gap-3 mt-8">
+                  <button onClick={() => { setEcosCase(null); setEcosEvaluation(null); setEcosMessages([]); setMode('ecos'); }}
+                    className="btn-secondary px-4 py-2 text-sm">Autre cas</button>
+                  <button onClick={() => saveEcosSession('finished', { finishedAt: new Date().toISOString() })}
+                    className="btn-secondary px-4 py-2 text-sm"><IconSave size={12} /> Enregistrer la trace</button>
+                  <button onClick={() => startEcos(ecosCase)} className="btn-primary px-4 py-2 text-sm">Refaire ce cas</button>
+                </div>
+                {ecosSaveState && (
+                  <div className="mono text-[10px] mt-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em' }}>
+                    {ecosSaveState}
+                  </div>
+                )}
+              </Reveal>
+            </section>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Score par section</h3>
-            <div className="space-y-3 mb-8">
+            <div className="section-divider" />
+
+            {/* Score par section — barres horizontales propres */}
+            <Reveal>
+              <Eyebrow>Score par section</Eyebrow>
+            </Reveal>
+            <div className="space-y-4 mt-6 mb-12">
               {Object.entries(ecosScore.bySection).map(([section, s]) => {
                 const pct = s.max > 0 ? (s.obtenu / s.max) * 100 : 0;
+                const color = pct >= 75 ? '#6b9d4d' : pct >= 50 ? '#c4a84d' : '#b54125';
                 return (
                   <div key={section}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>{section}</span>
-                      <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{s.obtenu} / {s.max}</span>
+                    <div className="flex justify-between items-baseline text-sm mb-2">
+                      <span style={{ fontWeight: 500 }}>{section}</span>
+                      <span className="mono text-xs" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>{s.obtenu} / {s.max} · {Math.round(pct)}%</span>
                     </div>
-                    <div className="h-2" style={{ background: '#d6d0c1' }}>
-                      <div className="h-full progress-bar" style={{
-                        width: `${pct}%`,
-                        background: pct >= 75 ? '#6b9d4d' : pct >= 50 ? '#c4a84d' : '#b54125',
-                      }} />
+                    <div className="h-1" style={{ background: 'var(--c-line)' }}>
+                      <div className="h-full progress-bar" style={{ width: `${pct}%`, background: color }} />
                     </div>
                   </div>
                 );
@@ -3455,74 +3473,94 @@ Contraintes :
             </div>
 
             {ecosEvaluation.feedbackGlobal && (
-              <div className="p-4 mb-6" style={{ background: '#fff', borderLeft: '3px solid #1a1a1a' }}>
-                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Feedback global</div>
-                <div className="text-sm" style={{ whiteSpace: 'pre-wrap' }}>{ecosEvaluation.feedbackGlobal}</div>
-              </div>
+              <Reveal>
+                <div className="bezel mb-8" style={{ display: 'block' }}>
+                  <div className="bezel-inner" style={{ padding: 'clamp(24px, 3vw, 36px)' }}>
+                    <Eyebrow accent>Feedback global</Eyebrow>
+                    <div className="text-sm mt-4" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--c-ink)' }}>{ecosEvaluation.feedbackGlobal}</div>
+                  </div>
+                </div>
+              </Reveal>
             )}
 
-            <div className="grid md:grid-cols-2 gap-4 mb-8">
+            <div className="grid md:grid-cols-2 gap-5 mb-12">
               {Array.isArray(ecosEvaluation.pointsForts) && ecosEvaluation.pointsForts.length > 0 && (
-                <div className="p-4" style={{ background: '#e6f3e0', borderLeft: '3px solid #6b9d4d' }}>
-                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#2d5a1a' }}>Points forts</div>
-                  <ul className="text-sm space-y-1" style={{ color: '#2d5a1a' }}>
-                    {ecosEvaluation.pointsForts.map((p, i) => <li key={i}>• {p}</li>)}
+                <div className="p-5" style={{ background: '#e6f3e0', border: '1px solid #9ec28f', borderRadius: 'var(--r-md)' }}>
+                  <div className="mono text-[10px] mb-3" style={{ color: '#2d5a1a', letterSpacing: '0.22em', textTransform: 'uppercase' }}>● Points forts</div>
+                  <ul className="text-sm space-y-1.5" style={{ color: '#2d5a1a', lineHeight: 1.5 }}>
+                    {ecosEvaluation.pointsForts.map((p, i) => <li key={i}>— {p}</li>)}
                   </ul>
                 </div>
               )}
               {Array.isArray(ecosEvaluation.axesAmelioration) && ecosEvaluation.axesAmelioration.length > 0 && (
-                <div className="p-4" style={{ background: '#f8e0d6', borderLeft: '3px solid #b54125' }}>
-                  <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#6b1f0a' }}>Axes d'amélioration</div>
-                  <ul className="text-sm space-y-1" style={{ color: '#6b1f0a' }}>
-                    {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>• {p}</li>)}
+                <div className="p-5" style={{ background: '#f8e0d6', border: '1px solid #dfa493', borderRadius: 'var(--r-md)' }}>
+                  <div className="mono text-[10px] mb-3" style={{ color: '#6b1f0a', letterSpacing: '0.22em', textTransform: 'uppercase' }}>● Axes d'amélioration</div>
+                  <ul className="text-sm space-y-1.5" style={{ color: '#6b1f0a', lineHeight: 1.5 }}>
+                    {ecosEvaluation.axesAmelioration.map((p, i) => <li key={i}>— {p}</li>)}
                   </ul>
                 </div>
               )}
             </div>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Détail item par item</h3>
-            <div className="space-y-2 mb-8">
+            <Reveal>
+              <Eyebrow>Détail item par item</Eyebrow>
+            </Reveal>
+            <div className="space-y-2 mt-6 mb-12">
               {(ecosEvaluation.items || []).map((it, i) => {
                 const max = Number(it.pointsMax) || 0;
                 const obt = Number(it.pointsObtenus) || 0;
                 const ratio = max > 0 ? obt / max : 0;
-                const color = ratio >= 0.75 ? '#6b9d4d' : ratio >= 0.5 ? '#c4a84d' : '#b54125';
+                const verdictMeta = ratio >= 0.75
+                  ? { label: 'OK', color: '#2d5a1a', bg: '#e6f3e0', border: '#9ec28f' }
+                  : ratio >= 0.5
+                    ? { label: 'PART.', color: '#5a4a10', bg: '#fff8e0', border: '#c4a84d' }
+                    : { label: 'KO', color: '#6b1f0a', bg: '#f8e0d6', border: '#dfa493' };
                 return (
-                  <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff', borderLeftWidth: 3, borderLeftColor: color }}>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-sm"><strong>{it.section}</strong> — {it.critere}</span>
-                      <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{obt} / {max}</span>
+                  <div key={i} className="p-4" style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="mono text-[10px] px-2 py-0.5 shrink-0" style={{
+                          background: verdictMeta.bg, color: verdictMeta.color,
+                          border: `1px solid ${verdictMeta.border}`, letterSpacing: '0.12em',
+                        }}>{verdictMeta.label}</span>
+                        <span className="text-sm truncate"><strong>{it.section}</strong> — {it.critere}</span>
+                      </div>
+                      <span className="mono text-xs shrink-0" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>{obt} / {max}</span>
                     </div>
-                    {it.commentaire && <div className="text-xs italic" style={{ color: '#5a5a5a' }}>{it.commentaire}</div>}
+                    {it.commentaire && <div className="text-xs italic mt-2" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.5 }}>{it.commentaire}</div>}
                   </div>
                 );
               })}
             </div>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Grille claire des points</h3>
-            <div className="space-y-2 mb-8">
+            <Reveal>
+              <Eyebrow>Grille de référence</Eyebrow>
+            </Reveal>
+            <div className="space-y-2 mt-6 mb-12">
               {(ecosCase.grilleCorrection || []).map((g, i) => {
                 const got = (ecosEvaluation.items || []).find(it => (it.critere || '').trim() === (g.critere || '').trim());
                 return (
-                  <div key={i} className="p-3 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="text-sm"><strong>{g.section}</strong> — {g.critere}</div>
-                      <div className="mono text-xs" style={{ color: '#5a5a5a' }}>{Number(got?.pointsObtenus || 0)} / {Number(g.points || 0)}</div>
-                    </div>
+                  <div key={i} className="p-3 flex items-center justify-between gap-3" style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                    <div className="text-sm truncate"><strong>{g.section}</strong> — {g.critere}</div>
+                    <div className="mono text-xs shrink-0" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>{Number(got?.pointsObtenus || 0)} / {Number(g.points || 0)}</div>
                   </div>
                 );
               })}
             </div>
 
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Transcript</h3>
-            <div className="space-y-2 mb-8">
+            <Reveal>
+              <Eyebrow>Transcript</Eyebrow>
+            </Reveal>
+            <div className="space-y-2 mt-6 mb-8">
               {ecosMessages.map((m, i) => (
-                <div key={i} className="p-3 text-sm" style={{
-                  background: m.role === 'user' ? '#fff' : '#f6f3ec',
-                  borderLeft: `3px solid ${m.role === 'user' ? '#1a1a1a' : '#b8b09c'}`,
+                <div key={i} className="p-4 text-sm" style={{
+                  background: m.role === 'user' ? 'var(--c-surface)' : 'var(--c-bg)',
+                  border: '1px solid var(--c-line)',
+                  borderRadius: 'var(--r-md)',
                   whiteSpace: 'pre-wrap',
+                  lineHeight: 1.5,
                 }}>
-                  <div className="mono text-xs mb-1" style={{ color: '#8a8a8a' }}>
+                  <div className="mono text-[9px] mb-1.5" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
                     {m.role === 'user' ? 'Candidat' : 'Patient'}
                   </div>
                   {m.content}
