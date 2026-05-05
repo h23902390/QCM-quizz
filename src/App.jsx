@@ -3564,69 +3564,89 @@ Contraintes :
 
         {mode === 'extract' && (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div>
-                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>Vérification</h2>
-                <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  {stats.total} questions extraites · {stats.qcm} QCM · {stats.qroc} QROC
-                  {(stats.badQcm + stats.badQroc) > 0 && (
-                    <span style={{ color: '#b54125' }}> · {stats.badQcm + stats.badQroc} sans réponse détectée</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                {supabaseEnabled && !currentDeckId && (
-                  <button onClick={saveCurrentDeck} disabled={savingDeck || !questions.length}
-                    className="btn-secondary px-4 py-2 text-sm">
-                    {savingDeck
-                      ? 'Sauvegarde…'
-                      : <><IconSave size={14} /> {session ? 'Sauvegarder ce deck' : 'Sauvegarder (connexion)'}</>}
-                  </button>
-                )}
-                {currentDeckId && (
-                  <span className="mono text-xs self-center" style={{ color: '#6b9d4d' }}>● Deck synchronisé</span>
-                )}
-                <button onClick={() => startQuiz(false)}
-                  disabled={stats.total - stats.badQcm - stats.badQroc === 0}
-                  className="btn-secondary px-4 py-2 text-sm">Quiz dans l'ordre</button>
-                <button onClick={() => startQuiz(true)}
-                  disabled={stats.total - stats.badQcm - stats.badQroc === 0}
-                  className="btn-primary px-4 py-2 text-sm">Quiz en aléatoire <IconArrowRight size={13} /></button>
-              </div>
-            </div>
-
-            <p className="text-sm mb-4" style={{ color: '#5a5a5a' }}>
-              Vérifie rapidement les bonnes réponses détectées. Tu peux corriger directement en cliquant.
-              Les questions <span style={{ color: '#b54125' }}>sans réponse détectée</span> sont exclues du quiz tant que tu ne les complètes pas.
-            </p>
-
-            <div className="space-y-6">
-              {questions.map((q) => (
-                <div key={q.id} className="p-5 border" style={{
-                  borderColor: (q.hasNoCorrect || q.hasNoAnswer) ? '#b54125' : '#d6d0c1',
-                  background: '#fff',
-                }}>
-                  <div className="flex items-baseline justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`pill ${q.type === 'qcm' ? 'pill-qcm' : 'pill-qroc'}`}>{q.type.toUpperCase()}</span>
-                      <span className="mono text-xs" style={{ color: '#8a8a8a' }}>p.{q.pageNum}</span>
-                      {q.detectionError && <span className="text-xs flex items-center gap-1" style={{ color: '#b54125' }}><IconWarning size={11} /> détection couleur échouée</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {(q.hasNoCorrect || q.hasNoAnswer) && (
-                        <span className="text-xs" style={{ color: '#b54125' }}>⚠ aucune réponse</span>
+            {/* Hero Vérification — éditorial */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(28px, 4vw, 56px)', paddingBottom: 'clamp(20px, 3vw, 40px)' }}>
+              <div className="flex flex-wrap items-end justify-between gap-6">
+                <div style={{ maxWidth: 720 }}>
+                  <Reveal>
+                    <Eyebrow>Étape 02 / Relecture</Eyebrow>
+                  </Reveal>
+                  <Reveal delay={80} as="h1">
+                    <span className="display block mt-5" style={{
+                      fontWeight: 600, fontSize: 'clamp(32px, 5vw, 56px)',
+                      lineHeight: 1.05, letterSpacing: '-0.025em',
+                    }}>
+                      Vérifie avant de te lancer.
+                    </span>
+                  </Reveal>
+                  <Reveal delay={140}>
+                    <div className="mt-5 flex flex-wrap items-baseline gap-x-6 gap-y-2 mono text-xs" style={{ letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--c-ink-mute)' }}>
+                      <span><strong style={{ color: 'var(--c-ink)' }}>{stats.total}</strong> extraites</span>
+                      <span><strong style={{ color: 'var(--c-ink)' }}>{stats.qcm}</strong> QCM</span>
+                      <span><strong style={{ color: 'var(--c-ink)' }}>{stats.qroc}</strong> QROC</span>
+                      {(stats.badQcm + stats.badQroc) > 0 && (
+                        <span style={{ color: 'var(--c-accent)' }}>· {stats.badQcm + stats.badQroc} sans réponse</span>
                       )}
-                      <button onClick={() => toggleFavorite(q.id)} className="star-btn p-1 -m-1" title="Marquer comme favori" aria-label="Favori">
-                        <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>
-                          <IconStar size={16} filled={q.favorite} />
-                        </span>
-                      </button>
                     </div>
+                  </Reveal>
+                  <Reveal delay={200}>
+                    <p className="mt-4 text-sm max-w-xl" style={{ color: 'var(--c-ink-soft)', lineHeight: 1.55 }}>
+                      Clique sur une option pour corriger sa marque « bonne réponse ». Les questions
+                      sans réponse détectée sont exclues du quiz tant qu'elles ne sont pas complétées.
+                    </p>
+                  </Reveal>
+                </div>
+                <Reveal delay={160}>
+                  <div className="flex gap-2 flex-wrap items-center">
+                    {supabaseEnabled && !currentDeckId && (
+                      <button onClick={saveCurrentDeck} disabled={savingDeck || !questions.length}
+                        className="btn-secondary px-4 py-2 text-sm">
+                        {savingDeck
+                          ? 'Sauvegarde…'
+                          : <><IconSave size={14} /> {session ? 'Sauvegarder' : 'Sauvegarder (connexion)'}</>}
+                      </button>
+                    )}
+                    {currentDeckId && (
+                      <span className="mono text-xs self-center" style={{ color: '#6b9d4d', letterSpacing: '0.12em' }}>● SYNCHRONISÉ</span>
+                    )}
+                    <button onClick={() => startQuiz(false)}
+                      disabled={stats.total - stats.badQcm - stats.badQroc === 0}
+                      className="btn-secondary px-4 py-2 text-sm">Dans l'ordre</button>
+                    <button onClick={() => startQuiz(true)}
+                      disabled={stats.total - stats.badQcm - stats.badQroc === 0}
+                      className="btn-primary px-4 py-2 text-sm">Aléatoire <IconArrowRight size={13} /></button>
+                  </div>
+                </Reveal>
+              </div>
+            </section>
+
+            <div className="section-divider" style={{ margin: 'clamp(24px, 3vw, 40px) 0' }} />
+
+            <div className="space-y-4">
+              {questions.map((q, idx) => (
+                <div key={q.id} className="p-5" style={{
+                  border: `1px solid ${(q.hasNoCorrect || q.hasNoAnswer) ? 'rgba(181,65,37,0.4)' : 'var(--c-line)'}`,
+                  background: 'var(--c-surface)',
+                  borderRadius: 'var(--r-md)',
+                }}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>{String(idx + 1).padStart(2, '0')}</span>
+                    <span className={`pill ${q.type === 'qcm' ? 'pill-qcm' : 'pill-qroc'}`}>{q.type.toUpperCase()}</span>
+                    <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>P.{q.pageNum}</span>
+                    {q.detectionError && <span className="mono text-[10px] flex items-center gap-1" style={{ color: 'var(--c-accent)', letterSpacing: '0.12em' }}><IconWarning size={11} /> DÉTECTION ÉCHOUÉE</span>}
+                    {(q.hasNoCorrect || q.hasNoAnswer) && (
+                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#f8e0d6', color: '#6b1f0a', border: '1px solid #dfa493', letterSpacing: '0.12em' }}>SANS RÉPONSE</span>
+                    )}
+                    <button onClick={() => toggleFavorite(q.id)} className="ml-auto star-btn p-1 -m-1" title="Favori" aria-label="Favori">
+                      <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>
+                        <IconStar size={16} filled={q.favorite} />
+                      </span>
+                    </button>
                   </div>
 
                   {q.context && (
                     <div className="mb-3 p-3 text-xs italic" style={{
-                      background: '#f6f3ec', color: '#5a5a5a', borderLeft: '2px solid #b8b09c',
+                      background: 'var(--c-bg)', color: 'var(--c-ink-soft)', borderLeft: '2px solid var(--c-line)',
                     }}>{q.context}</div>
                   )}
 
