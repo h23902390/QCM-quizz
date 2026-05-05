@@ -409,6 +409,7 @@ export default function App() {
   // Auth + decks (Supabase)
   const [session, setSession] = useState(null);
   const [showAuth, setShowAuth] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authIsSignup, setAuthIsSignup] = useState(false);
@@ -3321,40 +3322,86 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
       `}</style>
 
       <a href="#main" className="skip-link">Aller au contenu</a>
-      <header className="border-b" style={{ borderColor: '#dadce0', position: 'relative', zIndex: 2, background: '#ffffff' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-5 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-baseline gap-3 cursor-pointer min-w-0" onClick={() => mode !== 'quiz' && setMode('home')}>
-            <h1 className="display text-xl sm:text-2xl md:text-3xl" style={{ fontWeight: 600 }}>MedOutils</h1>
+      <header className="border-b" style={{ borderColor: '#dadce0', position: 'relative', zIndex: 3, background: '#ffffff' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-5 flex items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3 cursor-pointer min-w-0 flex-shrink" onClick={() => mode !== 'quiz' && setMode('home')}>
+            <h1 className="display text-xl sm:text-2xl md:text-3xl whitespace-nowrap" style={{ fontWeight: 600 }}>MedOutils</h1>
             {mode !== 'home' && mode !== 'qcm' && filename && (
               <span className="mono text-xs hidden md:inline truncate" style={{ color: '#5a5a5a', maxWidth: '40vw' }}>{filename}</span>
             )}
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+
+          {/* Desktop nav */}
+          <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
             {mode !== 'home' && mode !== 'qcm' && mode !== 'quiz' && (
-              <button onClick={reset} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Nouveau">
-                <IconPlus size={13} /><span className="hidden sm:inline ml-1">Nouveau</span>
+              <button onClick={reset} className="btn-secondary px-3 py-1.5 text-xs" aria-label="Nouveau">
+                <IconPlus size={13} /><span className="ml-1">Nouveau</span>
               </button>
             )}
             {supabaseEnabled && session && (
-              <button onClick={() => setMode('library')} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label={`Mes decks (${decks.length})`}>
+              <button onClick={() => setMode('library')} className="btn-secondary px-3 py-1.5 text-xs" aria-label={`Mes decks (${decks.length})`}>
                 <IconStar size={13} filled />
-                <span className="hidden sm:inline ml-1">Mes decks ({decks.length})</span>
-                <span className="sm:hidden ml-1">{decks.length}</span>
+                <span className="ml-1">Mes decks ({decks.length})</span>
               </button>
             )}
             {supabaseEnabled && (session
-              ? <button onClick={signOut} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" title={session.user?.email} aria-label="Déconnexion">
-                  <IconX size={13} /><span className="hidden sm:inline ml-1">Déconnexion</span>
+              ? <button onClick={signOut} className="btn-secondary px-3 py-1.5 text-xs" title={session.user?.email}>
+                  <IconX size={13} /><span className="ml-1">Déconnexion</span>
                 </button>
-              : <button onClick={() => setShowAuth(true)} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Connexion">
-                  <span className="hidden sm:inline">Connexion</span><span className="sm:hidden">Login</span>
-                </button>
+              : <button onClick={() => setShowAuth(true)} className="btn-secondary px-3 py-1.5 text-xs">Connexion</button>
             )}
-            <button onClick={() => setShowSettings(true)} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Réglages">
-              <IconCog size={13} /><span className="hidden sm:inline ml-1">Réglages</span>
+            <button onClick={() => setShowSettings(true)} className="btn-secondary px-3 py-1.5 text-xs">
+              <IconCog size={13} /><span className="ml-1">Réglages</span>
             </button>
           </div>
+
+          {/* Mobile burger */}
+          <button
+            type="button"
+            className="sm:hidden btn-secondary px-2.5 py-1.5 flex-shrink-0"
+            aria-label={mobileMenuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(v => !v)}
+          >
+            {mobileMenuOpen ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile dropdown panel */}
+        {mobileMenuOpen && (
+          <div className="sm:hidden border-t" style={{ borderColor: '#dadce0', background: '#ffffff' }}>
+            <div className="px-4 py-3 flex flex-col gap-2">
+              {mode !== 'home' && mode !== 'qcm' && mode !== 'quiz' && (
+                <button onClick={() => { setMobileMenuOpen(false); reset(); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                  <IconPlus size={14} /><span className="ml-2">Nouveau</span>
+                </button>
+              )}
+              {supabaseEnabled && session && (
+                <button onClick={() => { setMobileMenuOpen(false); setMode('library'); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                  <IconStar size={14} filled /><span className="ml-2">Mes decks ({decks.length})</span>
+                </button>
+              )}
+              {supabaseEnabled && (session
+                ? <button onClick={() => { setMobileMenuOpen(false); signOut(); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                    <IconX size={14} /><span className="ml-2">Déconnexion</span>
+                  </button>
+                : <button onClick={() => { setMobileMenuOpen(false); setShowAuth(true); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                    <span className="ml-1">Connexion</span>
+                  </button>
+              )}
+              <button onClick={() => { setMobileMenuOpen(false); setShowSettings(true); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                <IconCog size={14} /><span className="ml-2">Réglages</span>
+              </button>
+              {mode !== 'home' && mode !== 'qcm' && filename && (
+                <p className="mono text-[11px] truncate pt-1 px-1" style={{ color: '#80868b' }}>{filename}</p>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Barre de menu — bascule entre les outils */}
