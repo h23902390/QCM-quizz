@@ -2672,6 +2672,23 @@ Contraintes :
           background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.1  0 0 0 0 0.08  0 0 0 0 0.05  0 0 0 0.7 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
         }
 
+        /* ---------- ECOS picker card ---------- */
+        .ecos-card {
+          background: var(--c-surface);
+          border: 1px solid var(--c-line);
+          border-radius: var(--r-md);
+          padding: 20px;
+          cursor: pointer;
+          transition: transform var(--d-base) var(--ease-out-quart),
+                      box-shadow var(--d-base) var(--ease-out-quart),
+                      border-color var(--d-base) var(--ease-out-quart);
+        }
+        .ecos-card:hover {
+          transform: translateY(-2px);
+          border-color: var(--c-ink-mute);
+          box-shadow: var(--shadow-lift);
+        }
+
         /* ---------- Premium : section macro-spacing ---------- */
         .section-macro { padding-top: clamp(48px, 7vw, 96px); padding-bottom: clamp(48px, 7vw, 96px); }
         .section-divider {
@@ -3047,187 +3064,183 @@ Contraintes :
 
         {mode === 'ecos' && !ecosCase && (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div>
-                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>ECOS — Choix du cas</h2>
-                <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  Sélectionne un cas clinique. Tu joues le médecin, l'IA joue le patient.
+            {/* Hero éditorial */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)', paddingBottom: 'clamp(28px, 4vw, 56px)' }}>
+              <div className="flex flex-wrap items-start justify-between gap-6">
+                <div style={{ maxWidth: 720 }}>
+                  <Reveal className="anim-fade-up">
+                    <Eyebrow>Outil 02 / Examen clinique simulé</Eyebrow>
+                  </Reveal>
+                  <Reveal delay={80} className="anim-fade-up" as="h1">
+                    <span className="display block mt-5" style={{
+                      fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)',
+                      lineHeight: 1.02, letterSpacing: '-0.03em',
+                    }}>
+                      Le patient,<br />
+                      <span style={{ color: 'var(--c-ink-soft)' }}>tu l'as en face de toi.</span>
+                    </span>
+                  </Reveal>
+                  <Reveal delay={160} className="anim-fade-up">
+                    <p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>
+                      Tu mènes l'entretien, l'IA joue le rôle. Dictée vocale, timer
+                      réglementaire, notation détaillée à la fin. {visibleEcosCases.length} cas disponibles.
+                    </p>
+                  </Reveal>
                 </div>
+                <Reveal delay={120}>
+                  <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs"><IconArrowLeft size={12} /> Accueil</button>
+                </Reveal>
               </div>
-              <button onClick={() => setMode('home')} className="btn-secondary px-3 py-1.5 text-xs"><IconArrowLeft size={12} /> Accueil</button>
-            </div>
+            </section>
 
             {!apiKey && (
-              <div className="p-4 mb-4 text-sm" style={{ background: '#fff8e0', borderLeft: '3px solid #c4a84d', color: '#5a4a10' }}>
-                Aucune clé OpenAI configurée. Ouvre les <button onClick={() => setShowSettings(true)} className="underline">Réglages</button> pour la renseigner avant de démarrer un ECOS.
-              </div>
+              <Reveal>
+                <div className="p-4 mb-6 text-sm" style={{ background: '#fff8e0', borderLeft: '3px solid #c4a84d', color: '#5a4a10' }}>
+                  Aucune clé OpenAI configurée. Ouvre les <button onClick={() => setShowSettings(true)} className="underline">Réglages</button> pour la renseigner avant de démarrer un ECOS.
+                </div>
+              </Reveal>
             )}
 
-            <div className="flex flex-wrap gap-2 mb-4">
-              <button onClick={() => { setEcosImportOpen(v => !v); setEcosImportError(null); }}
-                className="btn-secondary px-3 py-1.5 text-xs">
-                {ecosImportOpen ? <><IconX size={11} /> Fermer l'import</> : <><IconPlus size={11} /> Importer un ECOS (PDF)</>}
-              </button>
-            </div>
-            <div className="mb-4 flex items-center gap-2">
-              <label className="mono text-xs" style={{ color: '#5a5a5a' }}>Catégorie</label>
-              <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1">
-                <option value="all">Toutes</option>
-                {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </select>
-            </div>
-
-            {ecosAttempts.length > 0 && (
-              <div className="mb-5 p-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-                  <div>
-                    <h3 className="display text-lg" style={{ fontWeight: 600 }}>Mes traces ECOS</h3>
-                    <div className="mono text-[10px]" style={{ color: '#6a6a6a' }}>
-                      Brouillons et ECOS terminés restent ici après fermeture.
-                    </div>
-                  </div>
-                  <div className="mono text-[10px]" style={{ color: '#8a8a8a' }}>
-                    {ecosAttempts.length} trace{ecosAttempts.length > 1 ? 's' : ''}
-                  </div>
+            {/* Barre de filtres + import */}
+            <Reveal>
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-4 border-b" style={{ borderColor: 'var(--c-line)' }}>
+                <div className="flex items-center gap-3">
+                  <span className="mono text-[10px] uppercase tracking-widest" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>Catégorie</span>
+                  <select value={ecosCategory} onChange={(e) => setEcosCategory(e.target.value)} className="input-field text-xs py-1.5">
+                    <option value="all">Toutes</option>
+                    {ecosCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
                 </div>
-                <div className="space-y-2">
-                  {ecosAttempts.slice(0, 6).map(attempt => {
-                    const d = attempt.data || {};
-                    const isFinished = d.status === 'finished';
-                    return (
-                      <div key={attempt.case_id} className="flex flex-wrap items-center justify-between gap-3 p-3" style={{ background: '#f6f3ec' }}>
-                        <div>
-                          <div className="text-sm" style={{ fontWeight: 600 }}>{d.caseTitle || attempt.case_id}</div>
-                          <div className="mono text-[10px]" style={{ color: '#6a6a6a' }}>
-                            {isFinished ? 'Terminé' : 'Brouillon'} · {formatEcosAttemptDate(attempt)}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => openEcosAttempt(attempt)}
-                          className={isFinished ? 'btn-primary px-3 py-1.5 text-xs' : 'btn-secondary px-3 py-1.5 text-xs'}
-                        >
-                          {isFinished ? <><IconEye size={11} /> Voir la trace</> : <><IconPlay size={11} /> Reprendre</>}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                <button onClick={() => { setEcosImportOpen(v => !v); setEcosImportError(null); }}
+                  className="btn-secondary px-3 py-1.5 text-xs">
+                  {ecosImportOpen ? <><IconX size={11} /> Fermer l'import</> : <><IconPlus size={11} /> Importer un ECOS (PDF)</>}
+                </button>
               </div>
-            )}
+            </Reveal>
 
             {ecosImportOpen && (
-              <div className="p-4 mb-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Importer un ECOS depuis un PDF</div>
-                <input
-                  ref={ecosImportInputRef}
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(e) => handleEcosImportFile(e.target.files?.[0])}
-                  disabled={ecosImportProcessing}
-                  className="text-sm"
-                />
-                {ecosImportFilename && <div className="mono text-xs mt-2" style={{ color: '#5a5a5a' }}>Fichier : {ecosImportFilename}</div>}
-                {ecosImportProcessing && <div className="text-xs mt-2 mono" style={{ color: '#5a5a5a' }}>Extraction + génération via GPT…</div>}
-                {ecosImportError && <div className="text-xs mt-2" style={{ color: '#b54125' }}>{ecosImportError}</div>}
-                {ecosImportPreview && (
-                  <div className="mt-3 p-3" style={{ background: '#f6f3ec' }}>
-                    <div className="display text-base mb-1" style={{ fontWeight: 600 }}>{ecosImportPreview.titre}</div>
-                    <div className="mono text-xs mb-2" style={{ color: '#b54125' }}>{ecosImportPreview.specialite} · {ecosImportPreview.duree} min</div>
-                    <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
-                      Grille : {ecosImportPreview.grilleCorrection.length} items · {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+              <Reveal>
+                <div className="bezel mb-8" style={{ display: 'block' }}>
+                  <div className="bezel-inner" style={{ padding: 'clamp(24px, 3vw, 36px)' }}>
+                    <Eyebrow accent>Importer un ECOS depuis un PDF</Eyebrow>
+                    <div className="mt-4">
+                      <input
+                        ref={ecosImportInputRef}
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => handleEcosImportFile(e.target.files?.[0])}
+                        disabled={ecosImportProcessing}
+                        className="text-sm"
+                      />
                     </div>
-                    <details className="text-xs">
-                      <summary className="cursor-pointer">Aperçu consigne candidat</summary>
-                      <div className="mt-2 whitespace-pre-wrap" style={{ color: '#3a3a3a' }}>{ecosImportPreview.consigneCandidat}</div>
-                    </details>
-                    <div className="mt-3 flex gap-2">
-                      <button onClick={saveImportedCase} className="btn-primary px-3 py-1.5 text-xs">Enregistrer dans ma banque</button>
-                      <button onClick={() => setEcosImportPreview(null)} className="btn-secondary px-3 py-1.5 text-xs">Annuler</button>
-                    </div>
+                    {ecosImportFilename && <div className="mono text-xs mt-2" style={{ color: 'var(--c-ink-soft)' }}>Fichier : {ecosImportFilename}</div>}
+                    {ecosImportProcessing && <div className="text-xs mt-2 mono" style={{ color: 'var(--c-ink-soft)' }}>Extraction + génération via GPT…</div>}
+                    {ecosImportError && <div className="text-xs mt-2" style={{ color: 'var(--c-accent)' }}>{ecosImportError}</div>}
+                    {ecosImportPreview && (
+                      <div className="mt-4 p-4" style={{ background: 'var(--c-bg)', borderRadius: 'var(--r-md)' }}>
+                        <div className="display text-base mb-1" style={{ fontWeight: 600 }}>{ecosImportPreview.titre}</div>
+                        <div className="mono text-xs mb-2" style={{ color: 'var(--c-accent)' }}>{ecosImportPreview.specialite} · {ecosImportPreview.duree} min</div>
+                        <div className="text-xs mb-2" style={{ color: 'var(--c-ink-soft)' }}>
+                          Grille : {ecosImportPreview.grilleCorrection.length} items · {ecosImportPreview.grilleCorrection.reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
+                        </div>
+                        <details className="text-xs">
+                          <summary className="cursor-pointer">Aperçu consigne candidat</summary>
+                          <div className="mt-2 whitespace-pre-wrap" style={{ color: 'var(--c-ink)' }}>{ecosImportPreview.consigneCandidat}</div>
+                        </details>
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={saveImportedCase} className="btn-primary px-3 py-1.5 text-xs">Enregistrer dans ma banque</button>
+                          <button onClick={() => setEcosImportPreview(null)} className="btn-secondary px-3 py-1.5 text-xs">Annuler</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                </div>
+              </Reveal>
             )}
 
-            <div className="grid md:grid-cols-2 gap-4">
-              {visibleEcosCases.filter(c => !customCases.find(cc => cc.id === c.id)).map(c => (
-                (() => {
-                  const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
-                  return (
-                <div key={c.id} className="card-hover p-5 border cursor-pointer" style={{ borderColor: '#d6d0c1', background: '#fff' }}
-                  onClick={() => startEcos(c)}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
-                    <div className="mono text-xs" style={{ color: '#8a8a8a' }}>{c.duree} min</div>
+            {ecosAttempts.length > 0 && (
+              <Reveal>
+                <section className="mb-12">
+                  <div className="flex items-baseline justify-between gap-4 mb-5">
+                    <Eyebrow>Mes traces — {ecosAttempts.length} session{ecosAttempts.length > 1 ? 's' : ''}</Eyebrow>
+                    <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>BROUILLONS &amp; TERMINÉS</span>
                   </div>
-                  <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
-                  <div className="text-xs" style={{ color: '#5a5a5a' }}>
-                    Grille : {c.grilleCorrection.length} items · {c.grilleCorrection.reduce((s, it) => s + it.points, 0)} pts
-                  </div>
-                  {lastAttempt?.data?.status === 'in_progress' && (
-                    <div className="mt-2">
-                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#fff8e0', color: '#5a4a10', border: '1px solid #c4a84d' }}>Session en cours</span>
-                      <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
-                        Reprise auto au clic
-                      </div>
-                    </div>
-                  )}
-                  {lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt && (
-                    <div className="mt-2">
-                      <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
-                      <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
-                        Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                  );
-                })()
-              ))}
-              {visibleEcosCases.filter(c => customCases.find(cc => cc.id === c.id)).map(c => (
-                (() => {
-                  const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
-                  return (
-                <div key={c.id} className="card-hover p-5 border relative" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                  <div onClick={() => startEcos(c)} className="cursor-pointer">
-                    <div className="flex items-baseline justify-between mb-2 gap-2">
-                      <div className="display text-lg" style={{ fontWeight: 600 }}>{c.titre}</div>
-                      <div className="mono text-xs" style={{ color: '#8a8a8a' }}>{c.duree} min</div>
-                    </div>
-                    <div className="mono text-xs mb-3" style={{ color: '#b54125' }}>{c.specialite}</div>
-                    <div className="text-xs mb-2" style={{ color: '#5a5a5a' }}>
-                      Grille : {(c.grilleCorrection || []).length} items · {(c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0)} pts
-                    </div>
-                    {lastAttempt?.data?.status === 'in_progress' && (
-                      <div className="mt-2">
-                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#fff8e0', color: '#5a4a10', border: '1px solid #c4a84d' }}>Session en cours</span>
-                        <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
-                          Reprise auto au clic
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {ecosAttempts.slice(0, 6).map(attempt => {
+                      const d = attempt.data || {};
+                      const isFinished = d.status === 'finished';
+                      return (
+                        <div key={attempt.case_id} className="flex items-center justify-between gap-3 p-4"
+                          style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="text-sm truncate" style={{ fontWeight: 600 }}>{d.caseTitle || attempt.case_id}</div>
+                            <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>
+                              {isFinished ? 'TERMINÉ' : 'BROUILLON'} · {formatEcosAttemptDate(attempt)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => openEcosAttempt(attempt)}
+                            className={isFinished ? 'btn-primary px-3 py-1.5 text-xs shrink-0' : 'btn-secondary px-3 py-1.5 text-xs shrink-0'}
+                          >
+                            {isFinished ? <><IconEye size={11} /> Voir</> : <><IconPlay size={11} /> Reprendre</>}
+                          </button>
                         </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </Reveal>
+            )}
+
+            <Reveal>
+              <div className="flex items-baseline justify-between gap-4 mb-6">
+                <Eyebrow>Banque de cas — {visibleEcosCases.length}</Eyebrow>
+                <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>CLIQUE POUR DÉMARRER</span>
+              </div>
+            </Reveal>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleEcosCases.map((c, idx) => {
+                const isCustom = !!customCases.find(cc => cc.id === c.id);
+                const lastAttempt = ecosAttempts.find(a => a.case_id === c.id);
+                const inProgress = lastAttempt?.data?.status === 'in_progress';
+                const finished = lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt;
+                const points = (c.grilleCorrection || []).reduce((s, it) => s + (Number(it.points) || 0), 0);
+                const num = String(idx + 1).padStart(2, '0');
+                return (
+                  <div key={c.id} className="ecos-card relative" onClick={() => startEcos(c)}>
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{num}</span>
+                      <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>{c.duree} MIN</span>
+                    </div>
+                    <div className="display text-base mb-2" style={{ fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.01em' }}>{c.titre}</div>
+                    <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-accent)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>{c.specialite}</div>
+                    <div className="text-xs" style={{ color: 'var(--c-ink-soft)' }}>
+                      {(c.grilleCorrection || []).length} items · {points} pts
+                    </div>
+                    {(inProgress || finished || isCustom) && (
+                      <div className="mt-3 pt-3 flex flex-wrap gap-2 items-center" style={{ borderTop: '1px solid var(--c-line)' }}>
+                        {inProgress && (
+                          <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#fff8e0', color: '#5a4a10', border: '1px solid #c4a84d', letterSpacing: '0.1em' }}>EN COURS</span>
+                        )}
+                        {finished && (
+                          <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f', letterSpacing: '0.1em' }}>FAIT</span>
+                        )}
+                        <span className="mono text-[10px] px-2 py-0.5" style={{
+                          background: isCustom ? '#fff0d6' : 'var(--c-bg)',
+                          color: isCustom ? '#7a5210' : 'var(--c-ink-mute)',
+                          border: '1px solid ' + (isCustom ? '#dfc88a' : 'var(--c-line)'),
+                          letterSpacing: '0.1em',
+                        }}>{isCustom ? 'PERSO' : 'FAC'}</span>
+                        {isCustom && (
+                          <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
+                            className="ml-auto text-xs underline" style={{ color: 'var(--c-accent)' }}>Supprimer</button>
+                        )}
                       </div>
                     )}
-                    {lastAttempt?.data?.status !== 'in_progress' && lastAttempt?.data?.finishedAt && (
-                      <div className="mt-2">
-                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: '#e6f3e0', color: '#2d5a1a', border: '1px solid #9ec28f' }}>✅ ECOS déjà fait</span>
-                        <div className="mono text-[10px] mt-1" style={{ color: '#6a6a6a' }}>
-                          Dernier passage: {new Date(lastAttempt.data.finishedAt).toLocaleString('fr-FR')}
-                        </div>
-                      </div>
-                    )}
                   </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="mono text-[10px] px-2 py-0.5" style={{
-                      background: c.source === 'fac' ? '#e7eede' : '#fff0d6',
-                      color: c.source === 'fac' ? '#3a5a20' : '#7a5210',
-                      border: '1px solid ' + (c.source === 'fac' ? '#b8c8a0' : '#dfc88a'),
-                    }}>{c.source === 'fac' ? 'Fac' : 'Perso'}</span>
-                    <button onClick={(e) => { e.stopPropagation(); deleteCustomCase(c.id); }}
-                      className="text-xs underline" style={{ color: '#b54125' }}>Supprimer</button>
-                  </div>
-                </div>
-                  );
-                })()
-              ))}
+                );
+              })}
             </div>
           </>
         )}
