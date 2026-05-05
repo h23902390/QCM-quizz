@@ -294,6 +294,11 @@ const AI_SERVICES = [
   { key: 'verifier', label: 'Verificateur QCM' },
   { key: 'entretien', label: 'Entretien documents' },
 ];
+const GROQ_TRANSCRIPTION_MODELS = [
+  { value: 'whisper-large-v3-turbo', label: 'Whisper large v3 turbo', hint: 'Rapide, bon choix par defaut' },
+  { value: 'whisper-large-v3', label: 'Whisper large v3', hint: 'Qualite plus haute, un peu plus lent' },
+];
+const GROQ_TRANSCRIPTION_USAGE_KEY = 'groq_transcription_usage_v1';
 const ECOS_PATIENT_NVIDIA_MODEL = 'nvidia/nemotron-3-nano-30b-a3b';
 const normalizeNvidiaModel = (value) => {
   const modelName = (value || '').trim();
@@ -305,6 +310,15 @@ const normalizeRestorableMode = (mode) => {
   if (mode === 'ecos-results') return 'ecos';
   if (mode === 'extract' || mode === 'quiz' || mode === 'results') return 'qcm';
   return 'home';
+};
+const todayUsageKey = () => new Date().toISOString().slice(0, 10);
+const readGroqTranscriptionUsage = () => {
+  try {
+    const usage = JSON.parse(localStorage.getItem(GROQ_TRANSCRIPTION_USAGE_KEY) || '{}');
+    return usage?.date === todayUsageKey() ? { date: usage.date, ms: Number(usage.ms) || 0 } : { date: todayUsageKey(), ms: 0 };
+  } catch {
+    return { date: todayUsageKey(), ms: 0 };
+  }
 };
 
 const readLocalEcosAttempts = () => {
@@ -388,6 +402,10 @@ export default function App() {
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
   const [nvidiaModel, setNvidiaModel] = useState(() => normalizeNvidiaModel(localStorage.getItem('nvidia_model')));
+  const [transcriptionProvider, setTranscriptionProvider] = useState(() => localStorage.getItem('transcription_provider') || 'openai');
+  const [groqApiKey, setGroqApiKey] = useState(() => localStorage.getItem('groq_key') || '');
+  const [groqTranscriptionModel, setGroqTranscriptionModel] = useState(() => localStorage.getItem('groq_transcription_model') || 'whisper-large-v3-turbo');
+  const [groqUsage, setGroqUsage] = useState(() => readGroqTranscriptionUsage());
   const [aiServiceProviders, setAiServiceProviders] = useState(() => {
     try {
       return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
@@ -401,6 +419,7 @@ export default function App() {
   });
   const [ocrMode, setOcrMode] = useState(() => localStorage.getItem('ocr_mode') || 'auto'); // 'off' | 'auto' | 'force'
   const [showKey, setShowKey] = useState(false);
+  const [showGroqKey, setShowGroqKey] = useState(false);
 
   // Drop zone
   const [dragOver, setDragOver] = useState(false);
@@ -774,23 +793,29 @@ export default function App() {
   const transcribeEntChunk = async (blob, filename) => {
     const fd = new FormData();
     fd.append('file', blob, filename);
-    fd.append('model', 'whisper-1');
     fd.append('language', 'fr');
-    const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: fd,
-    });
+    const useGroq = transcriptionProvider === 'groq';
+    fd.append('model', useGroq ? groqTranscriptionModel : 'whisper-1');
+    if (useGroq) fd.append('response_format', 'json');
+    const resp = await fetch(
+      useGroq ? 'https://api.groq.com/openai/v1/audio/transcriptions' : 'https://api.openai.com/v1/audio/transcriptions',
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${useGroq ? groqApiKey : apiKey}` },
+        body: fd,
+      }
+    );
     if (!resp.ok) {
       const t = await resp.text();
-      throw new Error(`Whisper ${resp.status} : ${t.slice(0, 200)}`);
+      throw new Error(`${useGroq ? 'Groq Whisper' : 'Whisper'} ${resp.status} : ${t.slice(0, 200)}`);
     }
     const data = await resp.json();
     return (data.text || '').trim();
   };
 
   const transcribeEntretien = async () => {
-    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (transcriptionProvider === 'groq' && !groqApiKey) { setEntError('Configure ta cle API Groq dans les Reglages.'); return; }
+    if (transcriptionProvider !== 'groq' && !apiKey) { setEntError('Configure ta cle API OpenAI dans les Reglages.'); return; }
     if (!entAudioBlob) return;
     setEntError(null);
     setEntStep('transcribing');
@@ -818,6 +843,11 @@ export default function App() {
         }
       }
       // Étape d'étiquetage Médecin / Patient via GPT
+      if (transcriptionProvider === 'groq' && entRecMs > 0) {
+        const next = { date: todayUsageKey(), ms: (readGroqTranscriptionUsage().ms || 0) + entRecMs };
+        setGroqUsage(next);
+        try { localStorage.setItem(GROQ_TRANSCRIPTION_USAGE_KEY, JSON.stringify(next)); } catch {}
+      }
       setEntProgress({ current: 0, total: 0 });
       setEntStep('labelling');
       try {
@@ -1380,17 +1410,21 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     return out.join('\n\n');
   };
 
-  const callOpenAIJson = async ({ service = 'synthese', system, user, temp = 0.2 }) => {
+  const callOpenAIJson = async ({ service = 'synthese', system, user, temp = 0.2, maxTokens = null }) => {
     if (!hasChatProvider(service)) throw new Error(missingChatProviderMessage(service));
+    const request = {
+      model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: temp,
+    };
+    if (maxTokens && providerForService(service) === 'nvidia') request.max_tokens = maxTokens;
     const data = await chatCompletion(service, {
-        model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: temp,
-      });
+      ...request,
+    });
     return JSON.parse(data.choices?.[0]?.message?.content || '{}');
   };
 
@@ -1596,6 +1630,7 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
       const parsed = await callOpenAIJson({
         service: 'qcmgen',
         temp: 0.25,
+        maxTokens: 6000,
         system: `Tu es un concepteur de QCM de medecine pour l'externat.
 Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
 {
@@ -1609,7 +1644,7 @@ Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
   ]
 }
 Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possibles, formulations type examen, pas de QROC, pas d'informations non deductibles du cours.`,
-        user: `Niveau : ${qcmGenLevel}\nNombre de QCM : ${qcmGenCount}\nFichier : ${file.name}\n\nCours :\n${text.slice(0, 45000)}`,
+        user: `Niveau : ${qcmGenLevel}\nNombre de QCM : ${qcmGenCount}\nFichier : ${file.name}\n\nCours :\n${text.slice(0, providerForService('qcmgen') === 'nvidia' ? 28000 : 45000)}`,
       });
       const title = parsed.title || file.name.replace(/\.pdf$/i, '');
       const generated = (Array.isArray(parsed.questions) ? parsed.questions : []).map((q, idx) => ({
@@ -1879,6 +1914,18 @@ Contraintes :
     const normalized = normalizeNvidiaModel(m);
     setNvidiaModel(normalized);
     try { localStorage.setItem('nvidia_model', normalized); } catch {}
+  };
+  const persistTranscriptionProvider = (provider) => {
+    setTranscriptionProvider(provider);
+    try { localStorage.setItem('transcription_provider', provider); } catch {}
+  };
+  const persistGroqApiKey = (key) => {
+    setGroqApiKey(key);
+    try { localStorage.setItem('groq_key', key); } catch {}
+  };
+  const persistGroqTranscriptionModel = (nextModel) => {
+    setGroqTranscriptionModel(nextModel);
+    try { localStorage.setItem('groq_transcription_model', nextModel); } catch {}
   };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
@@ -3619,8 +3666,41 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 ))}
               </div>
               <p className="text-xs mt-3" style={{ color: '#8a8a8a' }}>
-                Whisper/transcription audio utilise encore OpenAI. Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
+                Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
               </p>
+            </div>
+            <div className="mb-5 p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', background: 'var(--c-bg)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Transcription audio</label>
+              <select value={transcriptionProvider} onChange={e => persistTranscriptionProvider(e.target.value)} className="input-field w-full mb-3">
+                <option value="openai">OpenAI Whisper</option>
+                <option value="groq">Groq Whisper</option>
+              </select>
+              {transcriptionProvider === 'groq' && (
+                <>
+                  <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Cle API Groq</label>
+                  <div className="flex gap-2 mb-3">
+                    <input type={showGroqKey ? 'text' : 'password'} value={groqApiKey} onChange={e => persistGroqApiKey(e.target.value)}
+                      placeholder="gsk_..." className="input-field flex-1" />
+                    <button onClick={() => setShowGroqKey(!showGroqKey)} className="btn-secondary px-3 text-xs" aria-label={showGroqKey ? 'Cacher la cle Groq' : 'Voir la cle Groq'}>
+                      {showGroqKey ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+                    </button>
+                  </div>
+                  <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele Groq</label>
+                  <select value={groqTranscriptionModel} onChange={e => persistGroqTranscriptionModel(e.target.value)} className="input-field w-full mb-2">
+                    {GROQ_TRANSCRIPTION_MODELS.map(m => (
+                      <option key={m.value} value={m.value}>{m.label} - {m.hint}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs mb-0" style={{ color: '#8a8a8a' }}>
+                    Suivi local approximatif aujourd'hui : {Math.round((groqUsage.ms || 0) / 60000)} min / 30 min. Le vrai quota reste celui affiche dans Groq.
+                  </p>
+                </>
+              )}
+              {transcriptionProvider === 'openai' && (
+                <p className="text-xs mb-0" style={{ color: '#8a8a8a' }}>
+                  Utilise ta cle OpenAI ci-dessus avec <code className="mono">whisper-1</code>.
+                </p>
+              )}
             </div>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <span className="switch">
@@ -5322,10 +5402,10 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
 
           <div className="section-divider" style={{ margin: 'clamp(16px, 2.5vw, 28px) 0 clamp(28px, 3vw, 40px)' }} />
 
-          {!apiKey && (
+          {((transcriptionProvider === 'groq' && !groqApiKey) || (transcriptionProvider !== 'groq' && !apiKey)) && (
             <div className="mb-5 p-4 text-sm flex items-start gap-3" style={{ background: '#fce8e6', borderLeft: '3px solid #d93025', color: '#c5221f', borderRadius: 'var(--r-sm, 4px)' }}>
               <span className="mono text-[10px]" style={{ letterSpacing: '0.14em' }}>CLÉ API REQUISE</span>
-              <span>Configure ta clé OpenAI dans les Réglages pour utiliser cet outil.</span>
+              <span>Configure ta cle {transcriptionProvider === 'groq' ? 'Groq' : 'OpenAI'} dans les Reglages pour utiliser cet outil.</span>
             </div>
           )}
           {entError && (
@@ -5476,10 +5556,14 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           {/* Étape 3 : transcription */}
           {entAudioBlob && (
             <section className="mb-5" style={stepCardStyle}>
-              {stepHeader(3, totalSteps, 'Transcription · Whisper')}
+              {stepHeader(3, totalSteps, transcriptionProvider === 'groq' ? 'Transcription · Groq Whisper' : 'Transcription · Whisper')}
 
               {entStep === 'have-audio' && (
-                <button onClick={transcribeEntretien} disabled={!apiKey} className="btn-primary px-4 py-2.5 text-sm">
+                <button
+                  onClick={transcribeEntretien}
+                  disabled={transcriptionProvider === 'groq' ? !groqApiKey : !apiKey}
+                  className="btn-primary px-4 py-2.5 text-sm"
+                >
                   Transcrire l'audio
                 </button>
               )}
