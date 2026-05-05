@@ -4333,7 +4333,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
             {/* Note signature */}
             <Reveal>
               <p className="mono text-xs" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                Atelier personnel · Hugo Bette · {new Date().getFullYear()}
+                Atelier personnel · MedOutils · {new Date().getFullYear()}
               </p>
             </Reveal>
           </>
