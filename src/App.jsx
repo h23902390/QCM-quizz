@@ -3683,29 +3683,38 @@ Contraintes :
           const totalQuiz = quizQuestions.length;
           return (
             <>
-              <div className="mb-6">
-                <div className="flex items-baseline justify-between mb-2">
-                  <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                    Question {quizIdx + 1} / {totalQuiz}
+              {/* Header de progression — éditorial */}
+              <div className="mb-8" style={{ paddingTop: 'clamp(16px, 2vw, 32px)' }}>
+                <div className="flex items-baseline justify-between mb-4">
+                  <div className="flex items-baseline gap-4">
+                    <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
+                      Question
+                    </span>
+                    <span className="display" style={{ fontWeight: 600, fontSize: 'clamp(20px, 2vw, 26px)', letterSpacing: '-0.02em' }}>
+                      {String(quizIdx + 1).padStart(2, '0')}
+                      <span style={{ color: 'var(--c-ink-mute)', fontWeight: 400 }}> / {String(totalQuiz).padStart(2, '0')}</span>
+                    </span>
                   </div>
-                  <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
+                  <div className="flex items-center gap-4 mono text-xs">
                     <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct}</span>
-                    <span className="mx-2" style={{ color: '#b54125' }}>✗ {quizStats.incorrect}</span>
+                    <span style={{ color: 'var(--c-accent)' }}>✗ {quizStats.incorrect}</span>
                     <button onClick={() => { if (confirm('Quitter le quiz ?')) setMode('extract'); }}
-                      className="ml-3 underline">Quitter</button>
+                      className="underline" style={{ color: 'var(--c-ink-mute)' }}>Quitter</button>
                   </div>
                 </div>
-                <div className="h-1" style={{ background: '#d6d0c1' }}>
-                  <div className="h-full progress-bar" style={{
-                    background: '#1a1a1a', width: `${((quizIdx + (feedback ? 1 : 0)) / totalQuiz) * 100}%`,
+                <div className="h-px" style={{ background: 'var(--c-line)', position: 'relative' }}>
+                  <div className="h-px progress-bar" style={{
+                    background: 'var(--c-ink)', width: `${((quizIdx + (feedback ? 1 : 0)) / totalQuiz) * 100}%`,
+                    position: 'absolute', top: 0, left: 0,
                   }} />
                 </div>
               </div>
 
-              <div key={quizIdx} className="p-8 border anim-fade-up" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                <div className="flex items-center gap-2 mb-4">
+              <div key={quizIdx} className="bezel anim-fade-up" style={{ display: 'block' }}>
+                <div className="bezel-inner" style={{ padding: 'clamp(28px, 4vw, 48px)' }}>
+                <div className="flex items-center gap-3 mb-6">
                   <span className={`pill ${q.type === 'qcm' ? 'pill-qcm' : 'pill-qroc'}`}>{q.type.toUpperCase()}</span>
-                  <span className="mono text-xs" style={{ color: '#8a8a8a' }}>p.{q.pageNum}</span>
+                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>P.{q.pageNum}</span>
                   <button onClick={() => toggleFavorite(q.id)} className="ml-auto star-btn p-1 -m-1" title="Favori" aria-label="Favori">
                     <span key={String(q.favorite)} className={q.favorite ? 'star-pop inline-block' : 'inline-block'} style={{ color: q.favorite ? '#c4a84d' : '#cfc7b4' }}>
                       <IconStar size={18} filled={q.favorite} />
@@ -3714,12 +3723,18 @@ Contraintes :
                 </div>
 
                 {q.context && (
-                  <div className="mb-5 p-4 text-sm italic" style={{
-                    background: '#f6f3ec', color: '#3a3a3a', borderLeft: '3px solid #b8b09c',
+                  <div className="mb-6 p-5 text-sm italic" style={{
+                    background: 'var(--c-bg)', color: 'var(--c-ink)', borderRadius: 'var(--r-sm, 4px)',
+                    borderLeft: '2px solid var(--c-ink-mute)',
                   }}>{q.context}</div>
                 )}
 
-                <div className="display text-xl mb-6" style={{ fontWeight: 500, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                <div className="display mb-8" style={{
+                  fontWeight: 500,
+                  fontSize: 'clamp(20px, 2.2vw, 26px)',
+                  lineHeight: 1.4, letterSpacing: '-0.01em',
+                  whiteSpace: 'pre-wrap',
+                }}>
                   {q.enonce}
                 </div>
 
@@ -3816,6 +3831,7 @@ Contraintes :
                       {quizIdx + 1 >= totalQuiz ? 'Voir les résultats' : 'Suivante'} <IconArrowRight size={14} />
                     </button>
                   )}
+                </div>
                 </div>
               </div>
             </>
