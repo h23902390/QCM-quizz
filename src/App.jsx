@@ -208,6 +208,20 @@ const cleanMarkdownNoise = (s = '') => s
 const ECOS_ATTEMPTS_LOCAL_KEY = 'ecos_attempts_local';
 const APP_MODE_STORAGE_KEY = 'medoutils_last_mode';
 const RESTORABLE_MODES = new Set(['home', 'qcm', 'synthese', 'qcmgen', 'ecos', 'analyse', 'entretien', 'library']);
+const DEFAULT_AI_SERVICE_PROVIDERS = {
+  qroc: 'openai',
+  ecos: 'openai',
+  synthese: 'openai',
+  qcmgen: 'openai',
+  entretien: 'openai',
+};
+const AI_SERVICES = [
+  { key: 'qroc', label: 'Correction QROC' },
+  { key: 'ecos', label: 'ECOS patient + evaluation' },
+  { key: 'synthese', label: 'Fiches synthese' },
+  { key: 'qcmgen', label: 'Generateur QCM' },
+  { key: 'entretien', label: 'Entretien documents' },
+];
 const normalizeRestorableMode = (mode) => {
   if (RESTORABLE_MODES.has(mode)) return mode;
   if (mode === 'ecos-results') return 'ecos';
@@ -290,6 +304,15 @@ export default function App() {
   // Settings — restaure depuis localStorage à l'init (synchrone)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
+  const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
+  const [nvidiaModel, setNvidiaModel] = useState(() => localStorage.getItem('nvidia_model') || 'z-ai/glm-4.7');
+  const [aiServiceProviders, setAiServiceProviders] = useState(() => {
+    try {
+      return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
+    } catch {
+      return DEFAULT_AI_SERVICE_PROVIDERS;
+    }
+  });
   const [useAI, setUseAI] = useState(() => {
     const v = localStorage.getItem('use_ai');
     return v === null ? true : v === 'true';
@@ -713,27 +736,18 @@ export default function App() {
 - Ne reformule PAS le contenu : reprends les mots de la transcription, corrige uniquement les fautes de transcription évidentes et la ponctuation.
 - N'invente AUCUNE réplique. Si un passage est ambigu, fais le choix le plus probable.
 - Pas de commentaire, pas d'introduction. Uniquement le dialogue annoté.`;
-        const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: labelSys },
-              { role: 'user', content: `Transcription brute :\n\n${finalTxt}` },
-            ],
-            temperature: 0.2,
-          }),
+        const data = await chatCompletion('entretien', {
+          model,
+          messages: [
+            { role: 'system', content: labelSys },
+            { role: 'user', content: `Transcription brute :\n\n${finalTxt}` },
+          ],
+          temperature: 0.2,
         });
-        if (resp.ok) {
-          const data = await resp.json();
-          const labelled = (data.choices?.[0]?.message?.content || '').trim();
-          if (labelled) {
-            finalTxt = labelled;
-            setEntTranscript(labelled);
-          }
-        } else {
-          console.warn('Étiquetage échoué', await resp.text());
+        const labelled = (data.choices?.[0]?.message?.content || '').trim();
+        if (labelled) {
+          finalTxt = labelled;
+          setEntTranscript(labelled);
         }
       } catch (e) {
         console.warn('Étiquetage échoué', e);
@@ -749,7 +763,7 @@ export default function App() {
   };
 
   const generateEntNote = async () => {
-    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('entretien')) { setEntError(missingChatProviderMessage('entretien')); return; }
     if (!entTranscript.trim()) { setEntError('Aucune transcription à exploiter.'); return; }
     setEntError(null);
     setEntStep('generating');
@@ -786,23 +800,14 @@ ${patientIdentityBlock()}
 Médecin : ${entDoctorName || 'non précisé'}
 Signature souhaitée : ${entDoctorSignature || 'non précisée'}
 ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
+      const data = await chatCompletion('entretien', {
           model,
           messages: [
             { role: 'system', content: sys },
             { role: 'user', content: userMsg },
           ],
           temperature: 0.3,
-        }),
-      });
-      if (!resp.ok) {
-        const t = await resp.text();
-        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-      }
-      const data = await resp.json();
+        });
       const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
       setEntNote(txt);
       setEntStep('done');
@@ -824,15 +829,12 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
   };
 
   const generateEntReferralMail = async () => {
-    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('entretien')) { setEntError(missingChatProviderMessage('entretien')); return; }
     if (!entTranscript.trim() && !entNote.trim()) { setEntError('Génère d’abord une transcription ou un compte rendu.'); return; }
     setEntError(null);
     setEntGeneratingDoc('mail');
     try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
+      const data = await chatCompletion('entretien', {
           model,
           messages: [
             {
@@ -854,13 +856,7 @@ ${entTranscript}`,
             },
           ],
           temperature: 0.25,
-        }),
-      });
-      if (!resp.ok) {
-        const t = await resp.text();
-        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-      }
-      const data = await resp.json();
+        });
       const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
       setEntReferralMail(txt);
       if (entRecordId) {
@@ -875,7 +871,7 @@ ${entTranscript}`,
   };
 
   const generateEntPrescription = async () => {
-    if (!apiKey) { setEntError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('entretien')) { setEntError(missingChatProviderMessage('entretien')); return; }
     if (!entTranscript.trim() && !entNote.trim() && !entPrescriptionDraft.trim()) {
       setEntError('Ajoute une consigne, une transcription ou un compte rendu avant de générer l’ordonnance.');
       return;
@@ -883,10 +879,7 @@ ${entTranscript}`,
     setEntError(null);
     setEntGeneratingDoc('prescription');
     try {
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
+      const data = await chatCompletion('entretien', {
           model,
           messages: [
             {
@@ -909,13 +902,7 @@ ${entTranscript}`,
             },
           ],
           temperature: 0.2,
-        }),
-      });
-      if (!resp.ok) {
-        const t = await resp.text();
-        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-      }
-      const data = await resp.json();
+        });
       const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
       setEntPrescription(txt);
       if (entRecordId) {
@@ -1111,7 +1098,7 @@ ${entTranscript}`,
   const sendEcosMessage = async (textOverride) => {
     const txt = (textOverride ?? ecosInput).trim();
     if (!txt || !ecosCase || ecosSending) return;
-    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('ecos')) { setEcosError(missingChatProviderMessage('ecos')); return; }
     setEcosError(null);
     const newMessages = [...ecosMessages, { role: 'user', content: txt }];
     setEcosMessages(newMessages);
@@ -1126,16 +1113,7 @@ ${entTranscript}`,
         ],
         temperature: 0.2,
       };
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const t = await resp.text();
-        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-      }
-      const data = await resp.json();
+      const data = await chatCompletion('ecos', body);
       const reply = data.choices?.[0]?.message?.content || '...';
       const repliedMessages = [...newMessages, { role: 'assistant', content: reply }];
       setEcosMessages(repliedMessages);
@@ -1223,7 +1201,7 @@ ${entTranscript}`,
 
   const finishEcos = async () => {
     if (!ecosCase || ecosEvaluating) return;
-    if (!apiKey) { setEcosError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('ecos')) { setEcosError(missingChatProviderMessage('ecos')); return; }
     if (ecosMessages.length === 0) { setEcosError('Aucune interaction à évaluer.'); return; }
     setEcosTimerRunning(false);
     setEcosError(null);
@@ -1258,16 +1236,7 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
         response_format: { type: 'json_object' },
         temperature: 0,
       };
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        const t = await resp.text();
-        throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-      }
-      const data = await resp.json();
+      const data = await chatCompletion('ecos', body);
       const raw = data.choices?.[0]?.message?.content || '{}';
       const parsed = JSON.parse(raw);
       setEcosEvaluation(parsed);
@@ -1314,12 +1283,9 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     return out.join('\n\n');
   };
 
-  const callOpenAIJson = async ({ system, user, temp = 0.2 }) => {
-    if (!apiKey) throw new Error('Configure ta cle API OpenAI dans les Reglages.');
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
+  const callOpenAIJson = async ({ service = 'synthese', system, user, temp = 0.2 }) => {
+    if (!hasChatProvider(service)) throw new Error(missingChatProviderMessage(service));
+    const data = await chatCompletion(service, {
         model,
         messages: [
           { role: 'system', content: system },
@@ -1327,13 +1293,7 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
         ],
         response_format: { type: 'json_object' },
         temperature: temp,
-      }),
-    });
-    if (!resp.ok) {
-      const t = await resp.text();
-      throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-    }
-    const data = await resp.json();
+      });
     return JSON.parse(data.choices?.[0]?.message?.content || '{}');
   };
 
@@ -1348,6 +1308,7 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     try {
       const text = await extractPdfTextFromFile(file);
       const parsed = await callOpenAIJson({
+        service: 'synthese',
         temp: 0.15,
         system: `Tu es un enseignant de medecine. Tu transformes un cours brut en fiche de revision belle, structuree, tres utile pour l'externat.
 Reponds STRICTEMENT en JSON :
@@ -1430,6 +1391,7 @@ Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d
     try {
       const text = await extractPdfTextFromFile(file);
       const parsed = await callOpenAIJson({
+        service: 'qcmgen',
         temp: 0.25,
         system: `Tu es un concepteur de QCM de medecine pour l'externat.
 Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
@@ -1486,7 +1448,7 @@ Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possi
   };
 
   const convertRawToCaseViaGPT = async (rawText, sourceLabel) => {
-    if (!apiKey) throw new Error('Configure ta clé API OpenAI dans les Réglages.');
+    if (!hasChatProvider('ecos')) throw new Error(missingChatProviderMessage('ecos'));
     const sys = `Tu transformes une grille ECOS extraite d'un PDF (texte brut, parfois bruité) en un objet JSON STRICT conforme au format suivant, utilisé par une application de simulation médicale :
 {
   "id": "string-kebab-case-unique",
@@ -1503,10 +1465,7 @@ Contraintes :
 - Si le PDF ne donne pas de "brief patient", invente-le de façon cohérente avec la grille.
 - Renvoie UNIQUEMENT l'objet JSON, sans texte autour.`;
     const usr = `Source : ${sourceLabel}\n\nTEXTE BRUT EXTRAIT DU PDF :\n${rawText.slice(0, 18000)}`;
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
+    const data = await chatCompletion('ecos', {
         model,
         messages: [
           { role: 'system', content: sys },
@@ -1514,13 +1473,7 @@ Contraintes :
         ],
         response_format: { type: 'json_object' },
         temperature: 0.2,
-      }),
-    });
-    if (!resp.ok) {
-      const t = await resp.text();
-      throw new Error(`OpenAI ${resp.status} : ${t.slice(0, 200)}`);
-    }
-    const data = await resp.json();
+      });
     const raw = data.choices?.[0]?.message?.content || '{}';
     const parsed = JSON.parse(raw);
     // Normalise
@@ -1533,7 +1486,7 @@ Contraintes :
   const handleEcosImportFile = async (f) => {
     if (!f) return;
     if (!/\.pdf$/i.test(f.name)) { setEcosImportError('PDF requis.'); return; }
-    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('ecos')) { setEcosImportError(missingChatProviderMessage('ecos')); return; }
     setEcosImportError(null);
     setEcosImportPreview(null);
     setEcosImportFilename(f.name);
@@ -1568,7 +1521,7 @@ Contraintes :
   };
 
   const convertBuiltInEcos = async () => {
-    if (!apiKey) { setEcosImportError('Configure ta clé API OpenAI dans les Réglages.'); return; }
+    if (!hasChatProvider('ecos')) { setEcosImportError(missingChatProviderMessage('ecos')); return; }
     if (ecosBuiltInConverting) return;
     setEcosImportError(null);
     setEcosBuiltInConverting(true);
@@ -1713,6 +1666,47 @@ Contraintes :
   const persistModel = (m) => {
     setModel(m);
     try { localStorage.setItem('openai_model', m); } catch {}
+  };
+  const persistNvidiaBackendEnabled = (v) => {
+    setNvidiaBackendEnabled(v);
+    try { localStorage.setItem('nvidia_backend_enabled', String(v)); } catch {}
+  };
+  const persistNvidiaModel = (m) => {
+    setNvidiaModel(m);
+    try { localStorage.setItem('nvidia_model', m); } catch {}
+  };
+  const persistAiServiceProvider = (service, provider) => {
+    setAiServiceProviders(prev => {
+      const next = { ...prev, [service]: provider };
+      try { localStorage.setItem('ai_service_providers', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const providerForService = (service) => {
+    const selected = aiServiceProviders[service] || 'openai';
+    return selected === 'nvidia' && nvidiaBackendEnabled ? 'nvidia' : 'openai';
+  };
+  const hasChatProvider = (service) => providerForService(service) === 'nvidia' || !!apiKey;
+  const missingChatProviderMessage = (service) => (
+    aiServiceProviders[service] === 'nvidia' && nvidiaBackendEnabled
+      ? 'NVIDIA backend est sélectionné mais le serveur ne répond pas encore. Vérifie NVIDIA_API_KEY sur Vercel.'
+      : 'Configure ta clé API OpenAI dans les Réglages.'
+  );
+  const chatCompletion = async (service, body) => {
+    const provider = providerForService(service);
+    const finalBody = { ...body, model: provider === 'nvidia' ? nvidiaModel : model };
+    const resp = await fetch(provider === 'nvidia' ? '/api/ai-chat' : 'https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: provider === 'nvidia'
+        ? { 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify(provider === 'nvidia' ? { service, body: finalBody } : finalBody),
+    });
+    if (!resp.ok) {
+      const t = await resp.text();
+      throw new Error(`${provider === 'nvidia' ? 'NVIDIA' : 'OpenAI'} ${resp.status} : ${t.slice(0, 200)}`);
+    }
+    return resp.json();
   };
   const persistUseAI = (v) => {
     setUseAI(v);
@@ -2270,19 +2264,7 @@ Contraintes :
       response_format: { type: 'json_object' },
       temperature: 0,
     };
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`OpenAI ${resp.status} : ${txt.slice(0, 200)}`);
-    }
-    const data = await resp.json();
+    const data = await chatCompletion('qroc', body);
     const raw = data.choices?.[0]?.message?.content || '{}';
     try {
       const parsed = JSON.parse(raw);
@@ -2332,7 +2314,7 @@ Contraintes :
             explanation: 'Réponse correcte (ou très proche).',
             expected: q.expected, userValue: userText,
           };
-        } else if (useAI && apiKey) {
+        } else if (useAI && hasChatProvider('qroc')) {
           setEvaluating(true);
           try {
             const aiRes = await evaluateQROCWithAI(q, userText);
@@ -3042,10 +3024,10 @@ Contraintes :
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowSettings(false)}>
-          <div className="bg-white p-8 max-w-lg w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()}>
+          <div className="bg-white p-8 max-w-2xl w-full mx-4 modal-panel scrollbar" style={{ borderRadius: 'var(--r-md)', maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>Réglages</h2>
             <p className="text-sm mb-6" style={{ color: '#5a5a5a' }}>
-              La clé reste stockée localement dans ton navigateur et n'est envoyée qu'à OpenAI.
+              OpenAI perso reste stocke localement dans ton navigateur. NVIDIA passe par le backend Vercel, sans exposer la cle dans l'app.
             </p>
             <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Clé API OpenAI</label>
             <div className="flex gap-2 mb-5">
@@ -3060,6 +3042,35 @@ Contraintes :
             <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
               Suggestions : <code className="mono">gpt-5.4-mini</code> (recommandé, ~0,07 ¢/QROC) · <code className="mono">gpt-5.4-nano</code> (5× moins cher) · <code className="mono">gpt-5.5</code> (max qualité)
             </p>
+            <div className="mb-5 p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', background: 'var(--c-bg)' }}>
+              <label className="flex items-center gap-3 mb-4 cursor-pointer">
+                <span className="switch">
+                  <input type="checkbox" checked={nvidiaBackendEnabled} onChange={e => persistNvidiaBackendEnabled(e.target.checked)} />
+                  <span className="slider" />
+                </span>
+                <span className="text-sm">Activer NVIDIA via backend</span>
+              </label>
+              <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele NVIDIA</label>
+              <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full mb-3" placeholder="z-ai/glm-4.7" />
+              <div className="grid md:grid-cols-2 gap-3">
+                {AI_SERVICES.map(svc => (
+                  <label key={svc.key} className="text-xs">
+                    <span className="block mono text-[10px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{svc.label}</span>
+                    <select
+                      value={aiServiceProviders[svc.key] || 'openai'}
+                      onChange={e => persistAiServiceProvider(svc.key, e.target.value)}
+                      className="input-field w-full text-xs"
+                    >
+                      <option value="openai">OpenAI perso</option>
+                      <option value="nvidia" disabled={!nvidiaBackendEnabled}>NVIDIA backend</option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs mt-3" style={{ color: '#8a8a8a' }}>
+                Whisper/transcription audio utilise encore OpenAI. Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
+              </p>
+            </div>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <span className="switch">
                 <input type="checkbox" checked={useAI} onChange={e => persistUseAI(e.target.checked)} />
@@ -4610,7 +4621,7 @@ Contraintes :
                     placeholder="Contexte (optionnel) : ex. consultation de médecine générale, urgences…"
                     className="input-field w-full text-sm mb-3"
                   />
-                  <button onClick={generateEntNote} disabled={!apiKey} className="btn-primary px-4 py-2 text-sm">
+                  <button onClick={generateEntNote} disabled={!hasChatProvider('entretien')} className="btn-primary px-4 py-2 text-sm">
                     {entStep === 'done' ? '↺ Régénérer la restitution' : 'Générer la restitution'}
                   </button>
                 </div>
@@ -4666,7 +4677,7 @@ Contraintes :
                     <h3 className="text-sm" style={{ fontWeight: 600 }}>Mail à un confrère</h3>
                     <button
                       onClick={generateEntReferralMail}
-                      disabled={!apiKey || entGeneratingDoc === 'mail'}
+                      disabled={!hasChatProvider('entretien') || entGeneratingDoc === 'mail'}
                       className="btn-secondary px-3 py-1.5 text-xs"
                     >
                       {entGeneratingDoc === 'mail' ? 'Génération…' : 'Générer'}
@@ -4690,7 +4701,7 @@ Contraintes :
                     <h3 className="text-sm" style={{ fontWeight: 600 }}>Ordonnance</h3>
                     <button
                       onClick={generateEntPrescription}
-                      disabled={!apiKey || entGeneratingDoc === 'prescription'}
+                      disabled={!hasChatProvider('entretien') || entGeneratingDoc === 'prescription'}
                       className="btn-secondary px-3 py-1.5 text-xs"
                     >
                       {entGeneratingDoc === 'prescription' ? 'Génération…' : 'Suggérer IA'}
