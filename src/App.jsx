@@ -207,11 +207,12 @@ const cleanMarkdownNoise = (s = '') => s
 
 const ECOS_ATTEMPTS_LOCAL_KEY = 'ecos_attempts_local';
 const APP_MODE_STORAGE_KEY = 'medoutils_last_mode';
-const RESTORABLE_MODES = new Set(['home', 'qcm', 'synthese', 'qcmgen', 'ecos', 'analyse', 'entretien', 'library']);
+const RESTORABLE_MODES = new Set(['home', 'qcm', 'synthese', 'flashcards', 'qcmgen', 'ecos', 'analyse', 'entretien', 'library']);
 const DEFAULT_AI_SERVICE_PROVIDERS = {
   qroc: 'openai',
   ecos: 'openai',
   synthese: 'openai',
+  flashcards: 'openai',
   qcmgen: 'openai',
   entretien: 'openai',
 };
@@ -219,6 +220,7 @@ const AI_SERVICES = [
   { key: 'qroc', label: 'Correction QROC' },
   { key: 'ecos', label: 'ECOS patient + evaluation' },
   { key: 'synthese', label: 'Fiches synthese' },
+  { key: 'flashcards', label: 'Flashcards' },
   { key: 'qcmgen', label: 'Generateur QCM' },
   { key: 'entretien', label: 'Entretien documents' },
 ];
@@ -306,6 +308,7 @@ export default function App() {
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
   const [nvidiaModel, setNvidiaModel] = useState(() => localStorage.getItem('nvidia_model') || 'z-ai/glm-4.7');
+  const [verifierUrl, setVerifierUrl] = useState(() => localStorage.getItem('verifier_url') || '');
   const [aiServiceProviders, setAiServiceProviders] = useState(() => {
     try {
       return { ...DEFAULT_AI_SERVICE_PROVIDERS, ...(JSON.parse(localStorage.getItem('ai_service_providers') || '{}')) };
@@ -349,6 +352,14 @@ export default function App() {
   const [qcmGenError, setQcmGenError] = useState(null);
   const [qcmGenSaved, setQcmGenSaved] = useState(false);
   const qcmGenInputRef = useRef(null);
+  const [flashcardFileName, setFlashcardFileName] = useState('');
+  const [flashcardCount, setFlashcardCount] = useState(24);
+  const [flashcardProcessing, setFlashcardProcessing] = useState(false);
+  const [flashcardError, setFlashcardError] = useState(null);
+  const [flashcardSet, setFlashcardSet] = useState(null);
+  const [flashcardStudyIdx, setFlashcardStudyIdx] = useState(0);
+  const [flashcardRevealed, setFlashcardRevealed] = useState(false);
+  const flashcardInputRef = useRef(null);
 
   // ---------- ECOS state ----------
   const [ecosCase, setEcosCase] = useState(null); // cas sélectionné
@@ -1326,6 +1337,7 @@ Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d
         user: `Nom du fichier : ${file.name}\n\nTexte du cours :\n${text.slice(0, 45000)}`,
       });
       const sheet = {
+        kind: 'sheet',
         title: parsed.title || file.name.replace(/\.pdf$/i, ''),
         subtitle: parsed.subtitle || '',
         takeaways: Array.isArray(parsed.takeaways) ? parsed.takeaways : [],
@@ -1378,6 +1390,110 @@ Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d
     setSheetResult(row.data);
     setSheetFileName(row.source_name || row.data?.sourceName || '');
     setMode('synthese');
+  };
+
+  const flashcardSourceFromSheet = (sheet) => {
+    const d = sheet?.data || sheet || {};
+    const parts = [
+      `Titre : ${d.title || sheet?.title || ''}`,
+      d.subtitle ? `Angle : ${d.subtitle}` : '',
+      (d.takeaways || []).length ? `Points majeurs :\n- ${(d.takeaways || []).join('\n- ')}` : '',
+      (d.sections || []).map(sec => `${sec.title || 'Section'}\n- ${(sec.bullets || []).join('\n- ')}`).join('\n\n'),
+      (d.redFlags || []).length ? `Signes de gravite :\n- ${(d.redFlags || []).join('\n- ')}` : '',
+      (d.examTraps || []).length ? `Pieges :\n- ${(d.examTraps || []).join('\n- ')}` : '',
+      (d.miniAlgorithm || []).length ? `Algorithme :\n- ${(d.miniAlgorithm || []).join('\n- ')}` : '',
+      (d.keywords || []).length ? `Mots-cles : ${(d.keywords || []).join(', ')}` : '',
+    ].filter(Boolean);
+    return parts.join('\n\n');
+  };
+
+  const createFlashcardSetFromText = async ({ text, sourceName, titleHint }) => {
+    const parsed = await callOpenAIJson({
+      service: 'flashcards',
+      temp: 0.18,
+      system: `Tu es un enseignant de medecine. Transforme le cours fourni en flashcards recto-verso utiles pour l'externat.
+Reponds STRICTEMENT en JSON :
+{
+  "title": "titre court",
+  "cards": [
+    {"front":"question courte recto", "back":"reponse concise verso", "tags":["theme"], "trap":"piege frequent optionnel"}
+  ]
+}
+Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, diagnostics, traitements, signes de gravite, pieges de QCM. Ne mets pas d'information non deduite du cours sauf rappel medical standard utile.`,
+      user: `Source : ${sourceName}\nTitre souhaite : ${titleHint || ''}\nNombre de cartes : ${flashcardCount}\n\nContenu :\n${text.slice(0, 45000)}`,
+    });
+    const cards = (Array.isArray(parsed.cards) ? parsed.cards : []).map((c, idx) => ({
+      id: `fc-${Date.now()}-${idx}`,
+      front: String(c.front || '').trim(),
+      back: String(c.back || '').trim(),
+      tags: Array.isArray(c.tags) ? c.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 4) : [],
+      trap: String(c.trap || '').trim(),
+    })).filter(c => c.front && c.back);
+    if (!cards.length) throw new Error('Aucune flashcard exploitable renvoyee par l\'IA.');
+    return {
+      kind: 'flashcards',
+      title: parsed.title || titleHint || sourceName.replace(/\.pdf$/i, ''),
+      sourceName,
+      cards,
+      generatedAt: new Date().toISOString(),
+    };
+  };
+
+  const persistFlashcardSet = async (set) => {
+    setFlashcardSet(set);
+    setFlashcardStudyIdx(0);
+    setFlashcardRevealed(false);
+    if (session) {
+      const row = await saveStudySheet(`Flashcards - ${set.title}`, set.sourceName, set);
+      setStudySheets(s => [{ ...row }, ...s]);
+    }
+  };
+
+  const generateFlashcardsFromPdf = async (file) => {
+    if (!file) return;
+    if (!/\.pdf$/i.test(file.name)) { setFlashcardError('PDF requis.'); return; }
+    if (!libsReady) { setFlashcardError('Bibliotheques PDF en cours de chargement, reessaie.'); return; }
+    setFlashcardError(null);
+    setFlashcardFileName(file.name);
+    setFlashcardProcessing(true);
+    try {
+      const text = await extractPdfTextFromFile(file);
+      const set = await createFlashcardSetFromText({ text, sourceName: file.name, titleHint: file.name.replace(/\.pdf$/i, '') });
+      await persistFlashcardSet(set);
+    } catch (e) {
+      setFlashcardError('Generation impossible : ' + e.message);
+    } finally {
+      setFlashcardProcessing(false);
+      if (flashcardInputRef.current) flashcardInputRef.current.value = '';
+    }
+  };
+
+  const generateFlashcardsFromSheet = async (row) => {
+    if (!row?.data) return;
+    setFlashcardError(null);
+    setFlashcardFileName(row.title || row.source_name || '');
+    setFlashcardProcessing(true);
+    setMode('flashcards');
+    try {
+      const set = await createFlashcardSetFromText({
+        text: flashcardSourceFromSheet(row),
+        sourceName: row.title || row.source_name || 'Fiche synthese',
+        titleHint: row.data?.title || row.title,
+      });
+      await persistFlashcardSet(set);
+    } catch (e) {
+      setFlashcardError('Generation impossible : ' + e.message);
+    } finally {
+      setFlashcardProcessing(false);
+    }
+  };
+
+  const openFlashcardSet = (row) => {
+    setFlashcardSet(row.data);
+    setFlashcardFileName(row.source_name || row.data?.sourceName || '');
+    setFlashcardStudyIdx(0);
+    setFlashcardRevealed(false);
+    setMode('flashcards');
   };
 
   const generateQcmDeckFromPdf = async (file) => {
@@ -1675,6 +1791,10 @@ Contraintes :
     setNvidiaModel(m);
     try { localStorage.setItem('nvidia_model', m); } catch {}
   };
+  const persistVerifierUrl = (url) => {
+    setVerifierUrl(url);
+    try { localStorage.setItem('verifier_url', url); } catch {}
+  };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
       const next = { ...prev, [service]: provider };
@@ -1715,6 +1835,27 @@ Contraintes :
   const persistOcrMode = (v) => {
     setOcrMode(v);
     try { localStorage.setItem('ocr_mode', v); } catch {}
+  };
+
+  const buildVerifierQuery = (question, fb) => [
+    'Verifie cette information medicale a partir de sources fiables et corrige si besoin.',
+    '',
+    `Question : ${question?.enonce || ''}`,
+    `Ma reponse : ${fb?.userValue || ''}`,
+    `Reponse attendue : ${fb?.expected || ''}`,
+    fb?.explanation ? `Correction de l'app : ${fb.explanation}` : '',
+  ].filter(Boolean).join('\n');
+
+  const openVerifier = async (query) => {
+    const base = verifierUrl.trim();
+    if (!base) {
+      alert('Ajoute dans Reglages l URL de la page WordPress qui contient le shortcode [mwai_chatbot id="verificateur"].');
+      setShowSettings(true);
+      return;
+    }
+    try { await navigator.clipboard?.writeText(query); } catch {}
+    const sep = base.includes('?') ? '&' : '?';
+    window.open(`${base}${sep}verification=${encodeURIComponent(query)}`, '_blank', 'noopener,noreferrer');
   };
 
   // ---------- Reconstruction texte d'une page ----------
@@ -2281,6 +2422,8 @@ Contraintes :
   const submitAnswer = async () => {
     const q = quizQuestions[quizIdx];
     if (!q) return;
+    const confidence = userAnswer.confidence;
+    if (!confidence) return;
     let fb;
     if (q.type === 'qcm') {
       const userSet = userAnswer.set || new Set();
@@ -2335,11 +2478,12 @@ Contraintes :
         }
       }
     }
+    fb = { ...fb, confidence };
     setFeedback(fb);
-    setResults(r => [...r, { question: q, userAnswer, feedback: fb }]);
+    setResults(r => [...r, { question: q, userAnswer: { ...userAnswer, confidence }, feedback: fb }]);
     const answeredAt = new Date().toISOString();
     const withAttempt = (item) => item.id === q.id
-      ? { ...item, lastAttempt: { answeredAt, verdict: fb.verdict, score: fb.score, userValue: fb.userValue || '' } }
+      ? { ...item, lastAttempt: { answeredAt, verdict: fb.verdict, score: fb.score, userValue: fb.userValue || '', confidence } }
       : item;
     setQuestions(qs => {
       const next = qs.map(withAttempt);
@@ -2456,6 +2600,13 @@ Contraintes :
     const incorrect = results.filter(r => r.feedback?.verdict === 'incorrect').length;
     return { correct, partial, incorrect, total: results.length };
   }, [results]);
+  const confidenceStats = useMemo(() => {
+    const certainErrors = results.filter(r => r.feedback?.confidence === 'sur' && r.feedback?.verdict !== 'correct').length;
+    return { certainErrors };
+  }, [results]);
+  const studySheetRows = useMemo(() => studySheets.filter(s => s.data?.kind !== 'flashcards'), [studySheets]);
+  const flashcardRows = useMemo(() => studySheets.filter(s => s.data?.kind === 'flashcards'), [studySheets]);
+  const currentFlashcard = flashcardSet?.cards?.[flashcardStudyIdx] || null;
 
   return (
     <div className="min-h-screen w-full" style={{
@@ -2956,6 +3107,7 @@ Contraintes :
             { key: 'qcm', label: 'QCM / QROC' },
             { key: 'synthese', label: 'Fiches synthèse' },
             { key: 'qcmgen', label: 'Générateur QCM' },
+            { key: 'flashcards', label: 'Flashcards' },
             { key: 'ecos', label: 'ECOS' },
             { key: 'analyse', label: 'Analyse partiels' },
             { key: 'entretien', label: 'Entretien' },
@@ -2965,6 +3117,7 @@ Contraintes :
             : mode === 'ecos' || mode === 'ecos-results' ? 'ecos'
             : mode === 'synthese' ? 'synthese'
             : mode === 'qcmgen' ? 'qcmgen'
+            : mode === 'flashcards' ? 'flashcards'
             : mode === 'analyse' ? 'analyse'
             : mode === 'entretien' ? 'entretien'
             : 'qcm'
@@ -2978,6 +3131,8 @@ Contraintes :
               if (mode !== 'synthese') setMode('synthese');
             } else if (key === 'qcmgen') {
               if (mode !== 'qcmgen') setMode('qcmgen');
+            } else if (key === 'flashcards') {
+              if (mode !== 'flashcards') setMode('flashcards');
             } else if (key === 'ecos') {
               if (mode !== 'ecos') setMode('ecos');
             } else if (key === 'analyse') {
@@ -3041,6 +3196,17 @@ Contraintes :
             <input type="text" value={model} onChange={e => persistModel(e.target.value)} className="input-field w-full mb-2" />
             <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
               Suggestions : <code className="mono">gpt-5.4-mini</code> (recommandé, ~0,07 ¢/QROC) · <code className="mono">gpt-5.4-nano</code> (5× moins cher) · <code className="mono">gpt-5.5</code> (max qualité)
+            </p>
+            <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Page verificateur AI Engine</label>
+            <input
+              type="url"
+              value={verifierUrl}
+              onChange={e => persistVerifierUrl(e.target.value)}
+              placeholder="https://ton-site.fr/verificateur"
+              className="input-field w-full mb-2"
+            />
+            <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
+              Colle ici l'URL de la page WordPress qui contient <code className="mono">[mwai_chatbot id="verificateur"]</code>. Les boutons Verifier ouvrent cette page et copient la requete.
             </p>
             <div className="mb-5 p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', background: 'var(--c-bg)' }}>
               <label className="flex items-center gap-3 mb-4 cursor-pointer">
@@ -3120,7 +3286,7 @@ Contraintes :
                   fontWeight: 600, fontSize: 'clamp(40px, 7vw, 88px)',
                   lineHeight: 1.0, letterSpacing: '-0.035em',
                 }}>
-                  Six outils,<br />
+                  Sept outils,<br />
                   <span style={{ color: 'var(--c-ink-soft)' }}>une seule discipline.</span>
                 </span>
               </Reveal>
@@ -3134,7 +3300,7 @@ Contraintes :
 
             <div className="section-divider" />
 
-            {/* Les 6 outils */}
+            {/* Les 7 outils */}
             <section>
               <Reveal>
                 <Eyebrow>Sommaire</Eyebrow>
@@ -3143,10 +3309,11 @@ Contraintes :
                 {[
                   { n: '01', k: 'qcm', t: 'QCM / QROC', d: "Extraction d'un PDF de cours corrige, generation automatique d'un quiz, sauvegarde des decks et des favoris." },
                   { n: '02', k: 'synthese', t: 'Fiches synthese', d: 'PDF de cours vers fiche visuelle : points majeurs, algorithme, pieges, signes de gravite et mots-cles.' },
-                  { n: '03', k: 'qcmgen', t: 'Generateur QCM', d: 'PDF de cours vers QCM inedits, directement jouables et sauvegardables en deck, sans stocker le PDF.' },
-                  { n: '04', k: 'ecos', t: 'ECOS', d: 'Patient simule par IA, dictee vocale, notation detaillee /20 par section. 132 cas Fac integres + import PDF.' },
-                  { n: '05', k: 'analyse', t: 'Analyse partiels', d: 'Lecture rapide de tes partiels passes, reperage des questions recurrentes et des pieges.' },
-                  { n: '06', k: 'entretien', t: 'Entretien', d: 'Dossier patient vers entretien guide. Anamnese, examen, hypotheses, restitution ecrite.' },
+                  { n: '03', k: 'flashcards', t: 'Flashcards', d: 'Cours ou fiche synthese vers cartes recto-verso, sauvegardees sans conserver le PDF.' },
+                  { n: '04', k: 'qcmgen', t: 'Generateur QCM', d: 'PDF de cours vers QCM inedits, directement jouables et sauvegardables en deck, sans stocker le PDF.' },
+                  { n: '05', k: 'ecos', t: 'ECOS', d: 'Patient simule par IA, dictee vocale, notation detaillee /20 par section. 132 cas Fac integres + import PDF.' },
+                  { n: '06', k: 'analyse', t: 'Analyse partiels', d: 'Lecture rapide de tes partiels passes, reperage des questions recurrentes et des pieges.' },
+                  { n: '07', k: 'entretien', t: 'Entretien', d: 'Dossier patient vers entretien guide. Anamnese, examen, hypotheses, restitution ecrite.' },
                 ].map((c, i) => (
                   <Reveal key={c.k} delay={80 + i * 80}>
                     <div
@@ -3226,21 +3393,22 @@ Contraintes :
               <aside className="surface p-5">
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <Eyebrow>Fiches sauvegardees</Eyebrow>
-                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{studySheets.length}</span>
+                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{studySheetRows.length}</span>
                 </div>
                 {!session && <p className="text-xs mb-3" style={{ color: 'var(--c-ink-soft)' }}>Connecte-toi pour synchroniser les fiches.</p>}
                 <div className="space-y-2">
-                  {studySheets.slice(0, 8).map(s => (
+                  {studySheetRows.slice(0, 8).map(s => (
                     <div key={s.id} className="p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
                       <div className="text-sm" style={{ fontWeight: 600 }}>{s.title}</div>
                       <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>{new Date(s.created_at).toLocaleDateString('fr-FR')}</div>
                       <div className="flex gap-2 mt-3">
                         <button onClick={() => openStudySheet(s)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
+                        <button onClick={() => generateFlashcardsFromSheet(s)} className="btn-secondary px-3 py-1.5 text-xs">Flashcards</button>
                         <button onClick={() => removeStudySheet(s.id)} className="btn-secondary px-3 py-1.5 text-xs">Suppr.</button>
                       </div>
                     </div>
                   ))}
-                  {studySheets.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucune fiche pour l'instant.</p>}
+                  {studySheetRows.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucune fiche pour l'instant.</p>}
                 </div>
               </aside>
             </div>
@@ -3289,6 +3457,129 @@ Contraintes :
                 </div>
               </section>
             )}
+          </>
+        )}
+
+        {mode === 'flashcards' && (
+          <>
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)' }}>
+              <Reveal><Eyebrow>Outil 03 / Flashcards</Eyebrow></Reveal>
+              <Reveal delay={80} as="h1">
+                <span className="display block mt-5" style={{ fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)', lineHeight: 1.02, letterSpacing: '-0.03em' }}>
+                  Une fiche,<br /><span style={{ color: 'var(--c-ink-soft)' }}>des cartes actives.</span>
+                </span>
+              </Reveal>
+              <Reveal delay={150}>
+                <p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>
+                  Transforme un PDF ou une fiche synthese en cartes recto-verso. Les cartes sont sauvegardees, jamais le PDF.
+                </p>
+              </Reveal>
+            </section>
+
+            <div className="grid lg:grid-cols-3 gap-5">
+              <div className="surface p-5">
+                <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--c-ink-mute)' }}>Nombre de cartes</label>
+                <input type="number" min="8" max="80" value={flashcardCount} onChange={e => setFlashcardCount(Math.max(8, Math.min(80, Number(e.target.value) || 24)))} className="input-field w-full mb-4" />
+                <button onClick={() => flashcardInputRef.current?.click()} className="btn-primary w-full px-4 py-2 text-sm">
+                  Generer depuis PDF
+                </button>
+                <input ref={flashcardInputRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => generateFlashcardsFromPdf(e.target.files?.[0])} />
+                <p className="text-xs mt-3" style={{ color: 'var(--c-ink-soft)' }}>
+                  {flashcardFileName || 'Tu peux aussi transformer une fiche sauvegardee.'}
+                </p>
+                {flashcardError && <p className="text-xs mt-3" style={{ color: 'var(--c-accent)' }}>{flashcardError}</p>}
+              </div>
+
+              <div className="lg:col-span-2">
+                <div className="bezel" style={{ display: 'block' }}>
+                  <div className="bezel-inner" style={{ padding: 'clamp(30px, 5vw, 64px)', minHeight: 340 }}>
+                    {flashcardProcessing && (
+                      <div className="text-center py-16">
+                        <Eyebrow accent>Generation</Eyebrow>
+                        <div className="display mt-4" style={{ fontSize: 'clamp(24px, 3vw, 38px)', fontWeight: 600 }}>Creation des cartes...</div>
+                      </div>
+                    )}
+                    {!flashcardProcessing && currentFlashcard && (
+                      <div>
+                        <div className="flex items-center justify-between gap-3 mb-6">
+                          <div>
+                            <Eyebrow accent>{flashcardSet.title}</Eyebrow>
+                            <div className="mono text-[10px] mt-2" style={{ color: 'var(--c-ink-mute)' }}>
+                              {flashcardStudyIdx + 1} / {flashcardSet.cards.length}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setFlashcardStudyIdx(i => Math.max(0, i - 1)); setFlashcardRevealed(false); }} disabled={flashcardStudyIdx === 0} className="btn-secondary px-3 py-2 text-xs"><IconArrowLeft size={13} /></button>
+                            <button onClick={() => { setFlashcardStudyIdx(i => Math.min((flashcardSet.cards.length || 1) - 1, i + 1)); setFlashcardRevealed(false); }} disabled={flashcardStudyIdx + 1 >= flashcardSet.cards.length} className="btn-secondary px-3 py-2 text-xs"><IconArrowRight size={13} /></button>
+                          </div>
+                        </div>
+                        <div className="p-6 mb-4" style={{ background: 'var(--c-bg)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', minHeight: 170 }}>
+                          <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>RECTO</div>
+                          <div className="display" style={{ fontSize: 'clamp(22px, 2.5vw, 34px)', lineHeight: 1.2, fontWeight: 600 }}>{currentFlashcard.front}</div>
+                        </div>
+                        {flashcardRevealed ? (
+                          <div className="p-5 mb-4" style={{ background: '#e6f3e0', border: '1px solid #9ec28f', borderRadius: 'var(--r-md)' }}>
+                            <div className="mono text-[10px] mb-3" style={{ letterSpacing: '0.18em' }}>VERSO</div>
+                            <div className="text-sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{currentFlashcard.back}</div>
+                            {currentFlashcard.trap && <div className="text-xs mt-4 pt-4" style={{ borderTop: '1px solid #9ec28f' }}>Piege : {currentFlashcard.trap}</div>}
+                          </div>
+                        ) : (
+                          <button onClick={() => setFlashcardRevealed(true)} className="btn-primary px-5 py-2.5 text-sm">Retourner</button>
+                        )}
+                        {currentFlashcard.tags?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            {currentFlashcard.tags.map((tag, i) => <span key={i} className="pill pill-qroc">{tag}</span>)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!flashcardProcessing && !currentFlashcard && (
+                      <div className="text-center py-16">
+                        <Eyebrow>Demarrage</Eyebrow>
+                        <div className="display mt-4" style={{ fontSize: 'clamp(24px, 3vw, 38px)', fontWeight: 600 }}>Depose un PDF ou pars d'une fiche.</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-5 mt-6">
+              <aside className="surface p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <Eyebrow>Sets sauvegardes</Eyebrow>
+                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{flashcardRows.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {flashcardRows.slice(0, 8).map(row => (
+                    <div key={row.id} className="p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
+                      <div className="text-sm" style={{ fontWeight: 600 }}>{row.title}</div>
+                      <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>{row.data?.cards?.length || 0} cartes</div>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => openFlashcardSet(row)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
+                        <button onClick={() => removeStudySheet(row.id)} className="btn-secondary px-3 py-1.5 text-xs">Suppr.</button>
+                      </div>
+                    </div>
+                  ))}
+                  {flashcardRows.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucun set sauvegarde pour l'instant.</p>}
+                </div>
+              </aside>
+              <aside className="surface p-5">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <Eyebrow>Depuis tes fiches</Eyebrow>
+                  <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)' }}>{studySheetRows.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {studySheetRows.slice(0, 8).map(row => (
+                    <button key={row.id} onClick={() => generateFlashcardsFromSheet(row)} className="w-full text-left p-3" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)', background: 'var(--c-bg)' }}>
+                      <div className="text-sm" style={{ fontWeight: 600 }}>{row.title}</div>
+                      <div className="mono text-[10px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>Transformer en flashcards</div>
+                    </button>
+                  ))}
+                  {studySheetRows.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Cree d'abord une fiche synthese, ou importe directement un PDF.</p>}
+                </div>
+              </aside>
+            </div>
           </>
         )}
 
@@ -4255,7 +4546,7 @@ Contraintes :
                               const set = new Set(prev.set || []);
                               if (set.has(o.letter)) set.delete(o.letter);
                               else set.add(o.letter);
-                              return { set };
+                              return { ...prev, set };
                             });
                           }}>
                           <span className="mono font-bold">{o.letter}.</span>
@@ -4272,7 +4563,7 @@ Contraintes :
                   <div className="mb-6">
                     <textarea
                       value={userAnswer.text || ''}
-                      onChange={e => setUserAnswer({ text: e.target.value })}
+                      onChange={e => setUserAnswer(prev => ({ ...prev, text: e.target.value }))}
                       onKeyDown={e => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !feedback) submitAnswer();
                       }}
@@ -4282,6 +4573,30 @@ Contraintes :
                       rows={3}
                       style={{ resize: 'vertical' }}
                     />
+                  </div>
+                )}
+
+                {!feedback && (
+                  <div className="mb-6 p-4" style={{ background: 'var(--c-bg)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                    <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                      Score de confiance
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'sur', label: 'Sur' },
+                        { key: 'moyen', label: 'Moyen' },
+                        { key: 'hasard', label: 'Hasard' },
+                      ].map(item => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setUserAnswer(prev => ({ ...prev, confidence: item.key }))}
+                          className={userAnswer.confidence === item.key ? 'btn-primary px-4 py-2 text-xs' : 'btn-secondary px-4 py-2 text-xs'}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -4304,13 +4619,25 @@ Contraintes :
                       )}
                     </div>
                     <div className="text-sm">{feedback.explanation}</div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <span className="mono text-[10px] px-2 py-1" style={{ background: 'rgba(255,255,255,0.55)', border: '1px solid currentColor', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                        Confiance : {feedback.confidence === 'sur' ? 'sur' : feedback.confidence}
+                      </span>
+                      <button
+                        onClick={() => openVerifier(buildVerifierQuery(q, feedback))}
+                        className="btn-secondary px-3 py-1.5 text-xs"
+                        type="button"
+                      >
+                        Verifier
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 <div className="flex justify-end gap-3">
                   {!feedback && (
                     <button onClick={submitAnswer}
-                      disabled={evaluating || (q.type === 'qcm' ? !(userAnswer.set?.size) : !(userAnswer.text || '').trim())}
+                      disabled={evaluating || !userAnswer.confidence || (q.type === 'qcm' ? !(userAnswer.set?.size) : !(userAnswer.text || '').trim())}
                       className="btn-primary px-6 py-2.5 text-sm">
                       {evaluating ? 'Évaluation IA…' : 'Valider'}
                     </button>
@@ -4352,6 +4679,7 @@ Contraintes :
                   <span style={{ color: 'var(--c-ink)' }}>{Math.round((quizStats.correct / quizStats.total) * 100)} % réussite</span>
                   <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct} correctes</span>
                   {quizStats.partial > 0 && <span style={{ color: '#c4a84d' }}>~ {quizStats.partial} partielles</span>}
+                  <span style={{ color: '#7a4f00' }}>Fausses certitudes : {confidenceStats.certainErrors}</span>
                   <span style={{ color: 'var(--c-accent)' }}>✗ {quizStats.incorrect} incorrectes</span>
                 </div>
               </Reveal>
@@ -4399,6 +4727,11 @@ Contraintes :
                         background: verdictMeta.bg, color: verdictMeta.color,
                         border: `1px solid ${verdictMeta.border}`, letterSpacing: '0.12em',
                       }}>{verdictMeta.label}</span>
+                      {r.feedback?.confidence && (
+                        <span className="mono text-[10px] px-2 py-0.5" style={{ background: 'var(--c-bg)', color: 'var(--c-ink-soft)', border: '1px solid var(--c-line)', letterSpacing: '0.12em' }}>
+                          {r.feedback.confidence === 'sur' ? 'SUR' : r.feedback.confidence.toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm mb-3" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.question.enonce}</div>
                     <div className="text-xs grid grid-cols-1 md:grid-cols-2 gap-3 pt-3" style={{ borderTop: '1px solid var(--c-line)' }}>
@@ -4416,6 +4749,11 @@ Contraintes :
                         {r.feedback.explanation}
                       </div>
                     )}
+                    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--c-line)' }}>
+                      <button onClick={() => openVerifier(buildVerifierQuery(r.question, r.feedback))} className="btn-secondary px-3 py-1.5 text-xs">
+                        Verifier avec le chatbot
+                      </button>
+                    </div>
                   </div>
                 );
               })}
