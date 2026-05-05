@@ -1133,6 +1133,8 @@ ${entTranscript}`,
           ...newMessages,
         ],
         temperature: 0.2,
+        max_tokens: 280,
+        chat_template_kwargs: { enable_thinking: false },
       };
       const data = await chatCompletion('ecos', body);
       const reply = data.choices?.[0]?.message?.content || '...';
@@ -1256,6 +1258,7 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
         ],
         response_format: { type: 'json_object' },
         temperature: 0,
+        chat_template_kwargs: { enable_thinking: true },
       };
       const data = await chatCompletion('ecos', body);
       const raw = data.choices?.[0]?.message?.content || '{}';
@@ -1822,6 +1825,7 @@ Contraintes :
   const chatCompletion = async (service, body) => {
     const provider = providerForService(service);
     const finalBody = { ...body, model: provider === 'nvidia' ? nvidiaModel : model };
+    if (provider !== 'nvidia') delete finalBody.chat_template_kwargs;
     const resp = await fetch(provider === 'nvidia' ? '/api/ai-chat' : 'https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: provider === 'nvidia'
@@ -2919,6 +2923,11 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           0%   { transform: translateY(-20vh) rotate(0); opacity: 1; }
           100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
         }
+        @keyframes loadingRail {
+          0%   { transform: translateX(-120%); }
+          55%  { transform: translateX(35%); }
+          100% { transform: translateX(120%); }
+        }
 
         /* ---------- Animation utilities ---------- */
         .anim-fade-up { animation: fadeUp var(--d-base) var(--ease-out-quart) both; }
@@ -3010,6 +3019,15 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         .feedback-card { animation: scaleIn var(--d-base) var(--ease-out-quart) both; }
 
         .progress-bar { transition: width 380ms var(--ease-out-quart); }
+        .loading-rail {
+          position: relative; overflow: hidden; height: 4px;
+          background: var(--c-line-soft); border-radius: 999px;
+        }
+        .loading-rail::after {
+          content: ''; position: absolute; inset: 0; width: 48%;
+          background: linear-gradient(90deg, transparent, var(--c-accent), #3a9b6f, transparent);
+          border-radius: inherit; animation: loadingRail 1.35s var(--ease-out-quart) infinite;
+        }
 
         .arrow-slide { display: inline-block; transition: transform var(--d-base) var(--ease-out-quart); }
         .arrow-host:hover .arrow-slide { transform: translateX(4px); }
@@ -3505,6 +3523,14 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                     <div className="text-sm mt-2" style={{ color: 'var(--c-ink-soft)' }}>
                       {sheetFileName || 'Points cles, algorithme, pieges, mots-cles'}
                     </div>
+                    {sheetProcessing && (
+                      <div className="mt-6 max-w-md mx-auto">
+                        <div className="loading-rail" />
+                        <div className="mono text-[10px] mt-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                          Lecture du PDF puis synthese IA
+                        </div>
+                      </div>
+                    )}
                     {sheetError && <div className="text-sm mt-4" style={{ color: 'var(--c-accent)' }}>{sheetError}</div>}
                   </div>
                 </div>
@@ -3606,6 +3632,14 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 <p className="text-xs mt-3" style={{ color: 'var(--c-ink-soft)' }}>
                   {flashcardFileName || 'Tu peux aussi transformer une fiche sauvegardee.'}
                 </p>
+                {flashcardProcessing && (
+                  <div className="mt-5">
+                    <div className="loading-rail" />
+                    <div className="mono text-[10px] mt-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                      Preparation des cartes
+                    </div>
+                  </div>
+                )}
                 {flashcardError && <p className="text-xs mt-3" style={{ color: 'var(--c-accent)' }}>{flashcardError}</p>}
               </div>
 
@@ -3616,6 +3650,12 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                       <div className="text-center py-16">
                         <Eyebrow accent>Generation</Eyebrow>
                         <div className="display mt-4" style={{ fontSize: 'clamp(24px, 3vw, 38px)', fontWeight: 600 }}>Creation des cartes...</div>
+                        <div className="mt-7 max-w-sm mx-auto">
+                          <div className="loading-rail" />
+                          <div className="mono text-[10px] mt-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                            Extraction puis recto-verso
+                          </div>
+                        </div>
                       </div>
                     )}
                     {!flashcardProcessing && currentFlashcard && (
