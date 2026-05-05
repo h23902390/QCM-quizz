@@ -206,6 +206,14 @@ const cleanMarkdownNoise = (s = '') => s
   .replace(/\*\*/g, '');
 
 const ECOS_ATTEMPTS_LOCAL_KEY = 'ecos_attempts_local';
+const APP_MODE_STORAGE_KEY = 'medoutils_last_mode';
+const RESTORABLE_MODES = new Set(['home', 'qcm', 'synthese', 'qcmgen', 'ecos', 'analyse', 'entretien', 'library']);
+const normalizeRestorableMode = (mode) => {
+  if (RESTORABLE_MODES.has(mode)) return mode;
+  if (mode === 'ecos-results') return 'ecos';
+  if (mode === 'extract' || mode === 'quiz' || mode === 'results') return 'qcm';
+  return 'home';
+};
 
 const readLocalEcosAttempts = () => {
   try {
@@ -255,7 +263,10 @@ const formatEcosAttemptDate = (attempt) => {
 // ---------- Component ----------
 export default function App() {
   // App state
-  const [mode, setMode] = useState('home');
+  const [mode, setMode] = useState(() => {
+    try { return normalizeRestorableMode(localStorage.getItem(APP_MODE_STORAGE_KEY)); }
+    catch { return 'home'; }
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [libsReady, setLibsReady] = useState(false);
   const [libsError, setLibsError] = useState(null);
@@ -389,6 +400,10 @@ export default function App() {
   const entTimerRef = useRef(null);
   const entFileInputRef = useRef(null);
   const entPrescriptionRecRef = useRef(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(APP_MODE_STORAGE_KEY, normalizeRestorableMode(mode)); } catch {}
+  }, [mode]);
 
   // Tick durée enregistrement
   useEffect(() => {
