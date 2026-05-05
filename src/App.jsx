@@ -19,6 +19,21 @@ import { ECOS_BUILTIN_RAW } from './ecosBuiltInRaw';
 //  - Évaluation IA (OpenAI) pour les QROC
 // ============================================================
 
+// ---------- Toast & Confirm (UX moderne, remplace alert/confirm natifs) ----------
+const toast = (msg, kind = 'info') => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('app:toast', { detail: { msg, kind, id: Date.now() + Math.random() } }));
+};
+const confirmDialog = (msg, opts = {}) => new Promise(resolve => {
+  if (typeof window === 'undefined') return resolve(false);
+  const handler = (e) => {
+    window.removeEventListener('app:confirm-result', handler);
+    resolve(!!e.detail.ok);
+  };
+  window.addEventListener('app:confirm-result', handler);
+  window.dispatchEvent(new CustomEvent('app:confirm', { detail: { msg, ...opts } }));
+});
+
 // ---------- SVG Icons (Lucide stripped) ----------
 const Icon = ({ children, size = 16, stroke = 1.75, ...props }) => (
   <svg
@@ -160,6 +175,59 @@ const Confetti = ({ count = 36 }) => {
           }}
         />
       ))}
+    </div>
+  );
+};
+
+// ---------- Toast / Confirm hosts ----------
+const ToastHost = () => {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    const onToast = (e) => {
+      const t = e.detail;
+      setItems(prev => [...prev, t]);
+      const dur = t.kind === 'error' ? 5000 : 3000;
+      setTimeout(() => setItems(prev => prev.filter(x => x.id !== t.id)), dur);
+    };
+    window.addEventListener('app:toast', onToast);
+    return () => window.removeEventListener('app:toast', onToast);
+  }, []);
+  return (
+    <div aria-live="polite" aria-atomic="true" className="toast-host" role="status">
+      {items.map(t => (
+        <div key={t.id} className={`toast toast--${t.kind || 'info'}`}>
+          {t.kind === 'success' && (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>)}
+          {t.kind === 'error' && (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>)}
+          {t.kind === 'info' && (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>)}
+          <span>{t.msg}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ConfirmHost = () => {
+  const [pending, setPending] = useState(null); // { msg, ok, cancel, danger }
+  useEffect(() => {
+    const onConfirm = (e) => setPending(e.detail);
+    window.addEventListener('app:confirm', onConfirm);
+    return () => window.removeEventListener('app:confirm', onConfirm);
+  }, []);
+  const respond = (ok) => {
+    window.dispatchEvent(new CustomEvent('app:confirm-result', { detail: { ok } }));
+    setPending(null);
+  };
+  if (!pending) return null;
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }} onClick={() => respond(false)}>
+      <div className="bg-white p-6 sm:p-7 max-w-md w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()} role="alertdialog" aria-modal="true">
+        <h3 className="display text-lg sm:text-xl mb-3" style={{ fontWeight: 600 }}>Confirmation</h3>
+        <p className="text-sm mb-6" style={{ color: '#5a5a5a', lineHeight: 1.55 }}>{pending.msg}</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={() => respond(false)} className="btn-secondary px-4 py-2 text-sm" autoFocus>{pending.cancel || 'Annuler'}</button>
+          <button onClick={() => respond(true)} className={pending.danger ? 'btn-primary px-4 py-2 text-sm btn-danger' : 'btn-primary px-4 py-2 text-sm'}>{pending.ok || 'Confirmer'}</button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -1394,12 +1462,13 @@ Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d
   };
 
   const removeStudySheet = async (id) => {
-    if (!confirm('Supprimer cette fiche ?')) return;
+    if (!(await confirmDialog('Supprimer cette fiche ?', { ok: 'Supprimer', danger: true }))) return;
     try {
       await deleteStudySheet(id);
       setStudySheets(s => s.filter(x => x.id !== id));
+      toast('Fiche supprimée', 'success');
     } catch (e) {
-      alert('Suppression impossible : ' + e.message);
+      toast('Suppression impossible : ' + e.message, 'error');
     }
   };
 
@@ -1647,10 +1716,11 @@ Contraintes :
     if (ecosImportInputRef.current) ecosImportInputRef.current.value = '';
   };
 
-  const deleteCustomCase = (id) => {
-    if (!confirm('Supprimer ce cas ?')) return;
+  const deleteCustomCase = async (id) => {
+    if (!(await confirmDialog('Supprimer ce cas ?', { ok: 'Supprimer', danger: true }))) return;
     persistCustomCases(customCases.filter(c => c.id !== id));
     if (session) deleteEcosCaseRemote(id).catch(e => console.warn('deleteEcosCase', e));
+    toast('Cas supprimé', 'success');
   };
 
   const convertBuiltInEcos = async () => {
@@ -1950,8 +2020,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
     }
   };
 
-  const openVerifier = (query) => {
-    if (!confirm('Envoyer cette proposition a l IA de verification ? Elle analysera l item avec une source fiable et un verdict rapide.')) return;
+  const openVerifier = async (query) => {
+    if (!(await confirmDialog('Envoyer cette proposition à l\'IA de vérification ? Elle analysera l\'item avec une source fiable et un verdict rapide.', { ok: 'Envoyer' }))) return;
     sendVerifierMessage(query);
   };
 
@@ -2633,7 +2703,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
       const deck = await saveDeck(name, questions);
       setCurrentDeckId(deck.id);
       setDecks(d => [{ id: deck.id, name, created_at: deck.created_at, questions }, ...d]);
-    } catch (e) { setError('Sauvegarde impossible : ' + e.message); }
+      toast('Deck sauvegardé', 'success');
+    } catch (e) { setError('Sauvegarde impossible : ' + e.message); toast('Sauvegarde impossible', 'error'); }
     finally { setSavingDeck(false); }
   };
 
@@ -2646,12 +2717,13 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
   };
 
   const removeDeck = async (id) => {
-    if (!confirm('Supprimer ce deck ?')) return;
+    if (!(await confirmDialog('Supprimer ce deck ?', { ok: 'Supprimer', danger: true }))) return;
     try {
       await deleteDeck(id);
       setDecks(d => d.filter(x => x.id !== id));
       if (currentDeckId === id) setCurrentDeckId(null);
-    } catch (e) { alert('Suppression impossible : ' + e.message); }
+      toast('Deck supprimé', 'success');
+    } catch (e) { toast('Suppression impossible : ' + e.message, 'error'); }
   };
 
   // ---------- Favoris ----------
@@ -2666,9 +2738,9 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
 
   const startFavoritesQuiz = () => {
     const allFav = decks.flatMap(d => (d.questions || []).filter(q => q.favorite).map(q => ({ ...q, _deck: d.name })));
-    if (!allFav.length) { alert('Aucun favori. Étoile les questions à revoir depuis un deck.'); return; }
+    if (!allFav.length) { toast('Aucun favori. Étoile les questions à revoir depuis un deck.', 'info'); return; }
     const playable = allFav.filter(q => q.type === 'qcm' ? !q.hasNoCorrect : !q.hasNoAnswer);
-    if (!playable.length) { alert('Aucun favori jouable (réponses manquantes).'); return; }
+    if (!playable.length) { toast('Aucun favori jouable (réponses manquantes).', 'info'); return; }
     setQuizQuestions([...playable].sort(() => Math.random() - 0.5));
     setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
     setMode('quiz');
@@ -2817,6 +2889,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         }
         .input-field:focus { border-color: var(--c-accent); box-shadow: 0 0 0 3px rgba(26,111,212,0.14); }
         .input-field:focus-visible { outline: none; }
+        .input-field--error { border-color: #d93025; }
+        .input-field--error:focus { border-color: #d93025; box-shadow: 0 0 0 3px rgba(217,48,37,0.14); }
 
         /* ---------- Toggle iOS-style ---------- */
         .switch {
@@ -2990,11 +3064,72 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         .drop-zone:hover:not(.drop-zone--over) { border-color: #80868b; background: rgba(255,255,255,0.4); }
         .drop-zone--over { transform: scale(1.01); box-shadow: 0 12px 36px -16px rgba(26,111,212,0.32); }
 
+        /* ---------- Skip-to-content (a11y) ---------- */
+        .skip-link {
+          position: absolute; left: 0; top: 0;
+          background: var(--c-ink); color: var(--c-bg);
+          padding: 10px 16px; font-size: 13px; font-weight: 500;
+          border-radius: 0 0 var(--r-sm) 0;
+          transform: translateY(-120%);
+          transition: transform var(--d-fast) var(--ease-out-quart);
+          z-index: 100;
+        }
+        .skip-link:focus { transform: translateY(0); outline: none; }
+
+        /* ---------- Toast notifications ---------- */
+        .toast-host {
+          position: fixed; bottom: 20px; right: 20px;
+          display: flex; flex-direction: column; gap: 8px;
+          z-index: 90; pointer-events: none;
+          max-width: calc(100vw - 40px);
+        }
+        @media (max-width: 640px) {
+          .toast-host { bottom: 12px; right: 12px; left: 12px; max-width: none; align-items: stretch; }
+        }
+        .toast {
+          display: inline-flex; align-items: center; gap: 10px;
+          background: var(--c-ink); color: var(--c-bg);
+          padding: 12px 16px; border-radius: var(--r-sm);
+          font-size: 13.5px; font-weight: 500;
+          box-shadow: var(--shadow-lift);
+          pointer-events: auto;
+          animation: toastIn 220ms var(--ease-out-expo) both;
+          max-width: 380px;
+        }
+        @keyframes toastIn {
+          from { opacity: 0; transform: translateY(8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .toast--success { background: #1f4d2c; }
+        .toast--error   { background: #8b1a14; }
+        .toast--info    { background: #202124; }
+
+        /* ---------- Bouton danger (confirm dialog destructif) ---------- */
+        .btn-danger { background: #b32f24 !important; }
+        .btn-danger:hover:not(:disabled) { background: #d93025 !important; box-shadow: 0 6px 16px -4px rgba(217,48,37,0.32) !important; }
+
+        /* ---------- Empty states ---------- */
+        .empty-state {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 32px 16px; text-align: center;
+          color: var(--c-ink-mute);
+        }
+
+        /* ---------- Footer links ---------- */
+        .footer-link {
+          color: var(--c-ink-soft); font-size: 12px;
+          text-decoration: none; font-weight: 500;
+          transition: color var(--d-fast) var(--ease-out-quart);
+        }
+        .footer-link:hover { color: var(--c-ink); }
+
         /* ---------- Nav tabs avec indicateur slide ---------- */
         .tab-bar {
           position: relative;
           display: flex; align-items: center; gap: 2px;
+          scrollbar-width: none;
         }
+        .tab-bar::-webkit-scrollbar { display: none; }
         .tab-bar .tab-indicator {
           position: absolute; bottom: -1px; height: 2px;
           background: var(--c-accent); border-radius: 2px;
@@ -3010,6 +3145,9 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           cursor: pointer; white-space: nowrap;
           transition: color var(--d-fast) var(--ease-out-quart);
           border-radius: var(--r-sm) var(--r-sm) 0 0;
+        }
+        @media (max-width: 640px) {
+          .tab-btn { padding: 11px 12px; font-size: 13px; }
         }
         .tab-btn:hover:not(.tab-btn--active) { color: var(--c-ink); background: rgba(26,26,26,0.03); }
         .tab-btn--active { color: var(--c-ink); font-weight: 600; }
@@ -3182,29 +3320,38 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         }
       `}</style>
 
+      <a href="#main" className="skip-link">Aller au contenu</a>
       <header className="border-b" style={{ borderColor: '#dadce0', position: 'relative', zIndex: 2, background: '#ffffff' }}>
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-baseline gap-4 cursor-pointer" onClick={() => mode !== 'quiz' && setMode('home')}>
-            <h1 className="display text-2xl md:text-3xl" style={{ fontWeight: 600 }}>MedOutils</h1>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-5 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-baseline gap-3 cursor-pointer min-w-0" onClick={() => mode !== 'quiz' && setMode('home')}>
+            <h1 className="display text-xl sm:text-2xl md:text-3xl" style={{ fontWeight: 600 }}>MedOutils</h1>
             {mode !== 'home' && mode !== 'qcm' && filename && (
-              <span className="mono text-xs" style={{ color: '#5a5a5a' }}>{filename}</span>
+              <span className="mono text-xs hidden md:inline truncate" style={{ color: '#5a5a5a', maxWidth: '40vw' }}>{filename}</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             {mode !== 'home' && mode !== 'qcm' && mode !== 'quiz' && (
-              <button onClick={reset} className="btn-secondary px-3 py-1.5 text-xs">Nouveau</button>
+              <button onClick={reset} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Nouveau">
+                <IconPlus size={13} /><span className="hidden sm:inline ml-1">Nouveau</span>
+              </button>
             )}
             {supabaseEnabled && session && (
-              <button onClick={() => setMode('library')} className="btn-secondary px-3 py-1.5 text-xs">
-                <IconStar size={13} filled /> Mes decks ({decks.length})
+              <button onClick={() => setMode('library')} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label={`Mes decks (${decks.length})`}>
+                <IconStar size={13} filled />
+                <span className="hidden sm:inline ml-1">Mes decks ({decks.length})</span>
+                <span className="sm:hidden ml-1">{decks.length}</span>
               </button>
             )}
             {supabaseEnabled && (session
-              ? <button onClick={signOut} className="btn-secondary px-3 py-1.5 text-xs" title={session.user?.email}>Déconnexion</button>
-              : <button onClick={() => setShowAuth(true)} className="btn-secondary px-3 py-1.5 text-xs">Connexion</button>
+              ? <button onClick={signOut} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" title={session.user?.email} aria-label="Déconnexion">
+                  <IconX size={13} /><span className="hidden sm:inline ml-1">Déconnexion</span>
+                </button>
+              : <button onClick={() => setShowAuth(true)} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Connexion">
+                  <span className="hidden sm:inline">Connexion</span><span className="sm:hidden">Login</span>
+                </button>
             )}
-            <button onClick={() => setShowSettings(true)} className="btn-secondary px-3 py-1.5 text-xs">
-              <IconCog size={13} /> Réglages
+            <button onClick={() => setShowSettings(true)} className="btn-secondary px-2.5 sm:px-3 py-1.5 text-xs" aria-label="Réglages">
+              <IconCog size={13} /><span className="hidden sm:inline ml-1">Réglages</span>
             </button>
           </div>
         </div>
@@ -3255,11 +3402,16 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         />
       </nav>
 
-      {showAuth && (
+      {showAuth && (() => {
+        const emailValid = !authEmail || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(authEmail);
+        const passwordValid = !authPassword || authPassword.length >= 6;
+        const canSubmit = !!authEmail && !!authPassword && emailValid && passwordValid && !authBusy;
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
              onClick={() => setShowAuth(false)}>
-          <div className="bg-white p-8 max-w-md w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()}>
-            <h2 className="display text-2xl mb-4" style={{ fontWeight: 600 }}>
+          <form className="bg-white p-6 sm:p-8 max-w-md w-full mx-4 modal-panel" style={{ borderRadius: 'var(--r-md)' }} onClick={e => e.stopPropagation()}
+                onSubmit={(e) => { e.preventDefault(); if (canSubmit) submitAuth(); }}>
+            <h2 className="display text-xl sm:text-2xl mb-4" style={{ fontWeight: 600 }}>
               {authIsSignup ? 'Créer un compte' : 'Connexion'}
             </h2>
             {!supabaseEnabled && (
@@ -3267,25 +3419,43 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 Supabase n'est pas configuré. Définis VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY puis exécute supabase-schema.sql.
               </p>
             )}
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: '#8a8a8a' }}>Email</label>
             <input type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)}
-              placeholder="email@exemple.com" className="input-field w-full mb-3" autoFocus />
+              placeholder="email@exemple.com"
+              className={`input-field w-full mb-1 ${!emailValid ? 'input-field--error' : ''}`}
+              autoFocus
+              required
+              aria-invalid={!emailValid}
+              aria-describedby={!emailValid ? 'auth-email-err' : undefined} />
+            <p id="auth-email-err" className="text-xs mb-3" style={{ color: !emailValid ? '#d93025' : 'transparent', minHeight: '1em' }}>
+              {!emailValid ? 'Email invalide' : ' '}
+            </p>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: '#8a8a8a' }}>Mot de passe</label>
             <input type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && submitAuth()}
-              placeholder="Mot de passe (min. 6 caractères)" className="input-field w-full mb-3" />
-            {authError && <p className="text-xs mb-3" style={{ color: '#d93025' }}>{authError}</p>}
-            <div className="flex justify-between items-center">
-              <button onClick={() => { setAuthIsSignup(!authIsSignup); setAuthError(null); }}
-                className="text-xs underline" style={{ color: '#5a5a5a' }}>
+              placeholder="Min. 6 caractères"
+              className={`input-field w-full mb-1 ${!passwordValid ? 'input-field--error' : ''}`}
+              required
+              minLength={6}
+              aria-invalid={!passwordValid}
+              aria-describedby={!passwordValid ? 'auth-pw-err' : undefined} />
+            <p id="auth-pw-err" className="text-xs mb-3" style={{ color: !passwordValid ? '#d93025' : 'transparent', minHeight: '1em' }}>
+              {!passwordValid ? 'Au moins 6 caractères' : ' '}
+            </p>
+            {authError && <p className="text-xs mb-3" role="alert" style={{ color: '#d93025' }}>{authError}</p>}
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between sm:items-center gap-3">
+              <button type="button" onClick={() => { setAuthIsSignup(!authIsSignup); setAuthError(null); }}
+                className="text-xs underline self-start" style={{ color: '#5a5a5a' }}>
                 {authIsSignup ? '← Déjà un compte ? Connexion' : 'Pas de compte ? S\'inscrire →'}
               </button>
-              <button onClick={submitAuth} disabled={authBusy || !authEmail || !authPassword}
+              <button type="submit" disabled={!canSubmit}
                 className="btn-primary px-5 py-2 text-sm">
-                {authBusy ? '…' : (authIsSignup ? 'Créer' : 'Se connecter')}
+                {authBusy ? '…' : (authIsSignup ? 'Créer le compte' : 'Se connecter')}
               </button>
             </div>
-          </div>
+          </form>
         </div>
-      )}
+        );
+      })()}
 
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop" style={{ background: 'rgba(26,26,26,0.5)' }}
@@ -3420,7 +3590,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-6 py-8" style={{ display: mode === 'analyse' || mode === 'entretien' ? 'none' : '', position: 'relative', zIndex: 2 }}>
+      <main id="main" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8" style={{ display: mode === 'analyse' || mode === 'entretien' ? 'none' : '', position: 'relative', zIndex: 2 }}>
 
         {mode === 'home' && (
           <>
@@ -3564,7 +3734,18 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                       </div>
                     </div>
                   ))}
-                  {studySheetRows.length === 0 && <p className="text-xs" style={{ color: 'var(--c-ink-mute)' }}>Aucune fiche pour l'instant.</p>}
+                  {studySheetRows.length === 0 && (
+                    <div className="empty-state">
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="9" y1="13" x2="15" y2="13"/>
+                        <line x1="9" y1="17" x2="13" y2="17"/>
+                      </svg>
+                      <p className="text-xs mt-3" style={{ color: 'var(--c-ink-mute)' }}>Aucune fiche pour l'instant.</p>
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--c-ink-mute)' }}>Importe un PDF de cours pour commencer.</p>
+                    </div>
+                  )}
                 </div>
               </aside>
             </div>
@@ -4139,7 +4320,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 >
                   <IconSave size={11} /> Enregistrer brouillon
                 </button>
-                <button onClick={() => { if (confirm('Abandonner cet ECOS ?')) { saveEcosSession('abandoned'); setEcosTimerRunning(false); setEcosCase(null); setEcosMessages([]); setEcosInput(''); } }}
+                <button onClick={async () => { if (await confirmDialog('Abandonner cet ECOS ?', { ok: 'Abandonner', danger: true })) { saveEcosSession('abandoned'); setEcosTimerRunning(false); setEcosCase(null); setEcosMessages([]); setEcosInput(''); } }}
                   className="btn-secondary px-3 py-1.5 text-xs">Abandonner</button>
                 <button onClick={finishEcos} disabled={ecosEvaluating || ecosMessages.length === 0}
                   className="btn-primary px-4 py-1.5 text-xs">
@@ -4648,7 +4829,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   <div className="flex items-center gap-4 mono text-xs">
                     <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct}</span>
                     <span style={{ color: 'var(--c-accent)' }}>✗ {quizStats.incorrect}</span>
-                    <button onClick={() => { if (confirm('Quitter le quiz ?')) setMode('extract'); }}
+                    <button onClick={async () => { if (await confirmDialog('Quitter le quiz ?', { ok: 'Quitter' })) setMode('extract'); }}
                       className="underline" style={{ color: 'var(--c-ink-mute)' }}>Quitter</button>
                   </div>
                 </div>
@@ -4721,8 +4902,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                           }}>
                           <span className="mono font-bold">{o.letter}.</span>
                           <span className="flex-1">{o.text}</span>
-                          {feedback && o.correct && <span className="text-xs">✓</span>}
-                          {feedback && !o.correct && sel && <span className="text-xs">✗</span>}
+                          {feedback && o.correct && <span className="text-xs" aria-label="Correcte"><span aria-hidden="true">✓</span></span>}
+                          {feedback && !o.correct && sel && <span className="text-xs" aria-label="Incorrecte"><span aria-hidden="true">✗</span></span>}
                         </div>
                       );
                     })}
@@ -4771,7 +4952,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                 )}
 
                 {feedback && (
-                  <div className="p-4 mb-6 feedback-card" style={{
+                  <div role="status" aria-live="polite" className="p-4 mb-6 feedback-card" style={{
                     background: feedback.verdict === 'correct' ? '#e6f4ea'
                               : feedback.verdict === 'partiel' ? '#fef9e5'
                               : '#fce8e6',
@@ -4781,8 +4962,16 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                     borderLeft: `3px solid ${feedback.verdict === 'correct' ? '#34a853' : feedback.verdict === 'partiel' ? '#f9ab00' : '#d93025'}`,
                   }}>
                     <div className="flex items-baseline justify-between mb-1">
-                      <strong style={{ fontSize: 14 }}>
-                        {feedback.verdict === 'correct' ? '✓ Correct' : feedback.verdict === 'partiel' ? '~ Partiel' : '✗ Incorrect'}
+                      <strong style={{ fontSize: 14, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {feedback.verdict === 'correct' && (
+                          <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Correct</>
+                        )}
+                        {feedback.verdict === 'partiel' && (
+                          <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg> Partiel</>
+                        )}
+                        {feedback.verdict !== 'correct' && feedback.verdict !== 'partiel' && (
+                          <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Incorrect</>
+                        )}
                       </strong>
                       {typeof feedback.score === 'number' && (
                         <span className="mono text-xs">{feedback.score}/100</span>
@@ -5376,7 +5565,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                           </div>
                           <button onClick={() => restoreEntretien(row)} className="btn-secondary px-3 py-1.5 text-xs">Ouvrir</button>
                           <button
-                            onClick={() => { if (confirm('Supprimer cet entretien ?')) deleteEntretienRow(row); }}
+                            onClick={async () => { if (await confirmDialog('Supprimer cet entretien ?', { ok: 'Supprimer', danger: true })) deleteEntretienRow(row); }}
                             className="btn-secondary px-3 py-1.5 text-xs"
                             style={{ color: 'var(--c-accent)' }}
                           >Supprimer</button>
@@ -5407,11 +5596,26 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
       )}
 
       {mode !== 'analyse' && mode !== 'entretien' && (
-        <footer className="max-w-7xl mx-auto px-6 py-6 mt-8 text-xs border-t" style={{ color: '#80868b', borderColor: '#dadce0' }}>
-          Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à api.openai.com.
-          Les PDF ne sont jamais stockes ; pour les outils IA, seul le texte extrait est envoye a OpenAI.
+        <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-8 mt-8 text-xs border-t" style={{ color: '#80868b', borderColor: '#dadce0' }}>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+            <div style={{ maxWidth: '52ch' }}>
+              <p style={{ lineHeight: 1.55 }}>
+                Tout tourne dans le navigateur. Ta clé OpenAI est stockée localement et n'est envoyée qu'à <span className="mono">api.openai.com</span>. Les PDF ne sont jamais stockés ; seul le texte extrait peut être transmis aux modèles IA.
+              </p>
+              <p className="mt-2" style={{ color: '#9aa0a6' }}>
+                MedOutils — outil d'entraînement, ne remplace pas un avis médical.
+              </p>
+            </div>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Liens secondaires">
+              <a href="https://github.com/h23902390/QCM-quizz" target="_blank" rel="noreferrer" className="footer-link">GitHub</a>
+              <a href="mailto:hugobettem0@gmail.com" className="footer-link">Contact</a>
+              <button type="button" onClick={() => setShowSettings(true)} className="footer-link" style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer' }}>Réglages</button>
+            </nav>
+          </div>
         </footer>
       )}
+      <ToastHost />
+      <ConfirmHost />
     </div>
   );
 }
