@@ -827,7 +827,7 @@ ${entContext ? `Contexte fourni par l'étudiant : ${entContext}` : ''}`;
             { role: 'system', content: sys },
             { role: 'user', content: userMsg },
           ],
-          temperature: 0.3,
+          temperature: 0.25,
         });
       const txt = stripClinicalMarkdown(data.choices?.[0]?.message?.content || '');
       setEntNote(txt);
