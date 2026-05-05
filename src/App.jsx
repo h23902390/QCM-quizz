@@ -3572,39 +3572,76 @@ Contraintes :
 
         {mode === 'library' && (
           <>
-            <div className="flex items-baseline justify-between mb-6 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <h2 className="display text-2xl" style={{ fontWeight: 600 }}>Mes decks</h2>
-              <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
-                <IconStar size={14} filled /> Quiz sur tous mes favoris
-              </button>
-            </div>
-            {decks.length === 0 && (
-              <p className="text-sm" style={{ color: '#5a5a5a' }}>Aucun deck. Importe un PDF puis clique « Sauvegarder ce deck ».</p>
+            {/* Hero Library */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 64px)', paddingBottom: 'clamp(28px, 4vw, 48px)' }}>
+              <div className="flex flex-wrap items-end justify-between gap-6">
+                <div style={{ maxWidth: 720 }}>
+                  <Reveal>
+                    <Eyebrow>Bibliothèque · {decks.length} deck{decks.length > 1 ? 's' : ''}</Eyebrow>
+                  </Reveal>
+                  <Reveal delay={80} as="h1">
+                    <span className="display block mt-5" style={{
+                      fontWeight: 600, fontSize: 'clamp(36px, 6vw, 72px)',
+                      lineHeight: 1.02, letterSpacing: '-0.03em',
+                    }}>
+                      Tes decks,<br />
+                      <span style={{ color: 'var(--c-ink-soft)' }}>à portée de main.</span>
+                    </span>
+                  </Reveal>
+                  <Reveal delay={140}>
+                    <p className="mt-6 max-w-xl" style={{ color: 'var(--c-ink-soft)', fontSize: 17, lineHeight: 1.55 }}>
+                      Tout ce que tu as déjà extrait — synchronisé sur ton compte. Reprends une session,
+                      ou tire un quiz transversal sur tes seuls favoris.
+                    </p>
+                  </Reveal>
+                </div>
+                <Reveal delay={120}>
+                  <button onClick={startFavoritesQuiz} className="btn-primary px-4 py-2 text-sm">
+                    <IconStar size={14} filled /> Quiz favoris
+                  </button>
+                </Reveal>
+              </div>
+            </section>
+
+            <div className="section-divider" style={{ margin: 'clamp(24px, 3vw, 40px) 0' }} />
+
+            {decks.length === 0 ? (
+              <Reveal>
+                <div className="text-center py-16" style={{ color: 'var(--c-ink-mute)' }}>
+                  <div className="mono text-[10px] mb-3" style={{ letterSpacing: '0.22em', textTransform: 'uppercase' }}>Aucun deck pour l'instant</div>
+                  <p className="text-sm italic" style={{ color: 'var(--c-ink-soft)' }}>
+                    Importe un PDF puis clique « Sauvegarder ce deck ».
+                  </p>
+                </div>
+              </Reveal>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {decks.map((d, idx) => {
+                  const qs = d.questions || [];
+                  const favCount = qs.filter(q => q.favorite).length;
+                  const num = String(idx + 1).padStart(2, '0');
+                  return (
+                    <div key={d.id} className="ecos-card" style={{ cursor: 'default' }}>
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.16em' }}>{num}</span>
+                        <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.12em' }}>
+                          {new Date(d.created_at).toLocaleDateString('fr-FR')}
+                        </span>
+                      </div>
+                      <div className="display text-base mb-3" style={{ fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.01em' }}>{d.name}</div>
+                      <div className="mono text-[10px] mb-4" style={{ color: 'var(--c-ink-soft)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                        {qs.length} Q · {qs.filter(q => q.type === 'qcm').length} QCM · {qs.filter(q => q.type === 'qroc').length} QROC
+                        {favCount > 0 && <span style={{ color: '#c4a84d', marginLeft: 6 }}>★ {favCount}</span>}
+                      </div>
+                      <div className="flex gap-2 pt-3" style={{ borderTop: '1px solid var(--c-line)' }}>
+                        <button onClick={() => loadDeck(d)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
+                        <button onClick={() => removeDeck(d.id)} className="btn-secondary px-3 py-1.5 text-xs">Supprimer</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            <div className="grid md:grid-cols-2 gap-4">
-              {decks.map(d => {
-                const qs = d.questions || [];
-                const favCount = qs.filter(q => q.favorite).length;
-                return (
-                  <div key={d.id} className="p-4 border" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                    <div className="flex items-baseline justify-between mb-2">
-                      <div className="display text-lg" style={{ fontWeight: 600 }}>{d.name}</div>
-                      <span className="mono text-xs" style={{ color: '#8a8a8a' }}>
-                        {new Date(d.created_at).toLocaleDateString('fr-FR')}
-                      </span>
-                    </div>
-                    <div className="text-xs mb-3" style={{ color: '#5a5a5a' }}>
-                      {qs.length} questions · {qs.filter(q => q.type === 'qcm').length} QCM · {qs.filter(q => q.type === 'qroc').length} QROC
-                      {favCount > 0 && <span style={{ color: '#c4a84d', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 6 }}> · <IconStar size={11} filled /> {favCount}</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => loadDeck(d)} className="btn-primary px-3 py-1.5 text-xs">Ouvrir</button>
-                      <button onClick={() => removeDeck(d.id)} className="btn-secondary px-3 py-1.5 text-xs">Supprimer</button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </>
         )}
 
