@@ -396,6 +396,8 @@ export default function App() {
   const [verifierMessages, setVerifierMessages] = useState([]);
   const [verifierPending, setVerifierPending] = useState(false);
   const [verifierError, setVerifierError] = useState(null);
+  const [backgroundTasks, setBackgroundTasks] = useState([]);
+  const modeRef = useRef(mode);
 
   // Settings — restaure depuis localStorage à l'init (synchrone)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_key') || '');
@@ -535,8 +537,41 @@ export default function App() {
   const entPrescriptionRecRef = useRef(null);
 
   useEffect(() => {
+    modeRef.current = mode;
     try { localStorage.setItem(APP_MODE_STORAGE_KEY, normalizeRestorableMode(mode)); } catch {}
   }, [mode]);
+
+  const pushBackgroundTask = (task) => {
+    try {
+      if ('Notification' in window && window.Notification.permission === 'default') {
+        window.Notification.requestPermission().catch(() => {});
+      }
+    } catch {}
+    setBackgroundTasks(prev => [
+      { ...task, status: 'running', startedAt: Date.now() },
+      ...prev.filter(t => t.key !== task.key).slice(0, 4),
+    ]);
+  };
+
+  const finishBackgroundTask = (key, patch = {}) => {
+    setBackgroundTasks(prev => prev.map(t => (
+      t.key === key ? { ...t, ...patch, status: patch.status || 'done', finishedAt: Date.now() } : t
+    )));
+  };
+
+  const clearBackgroundTask = (key) => {
+    setBackgroundTasks(prev => prev.filter(t => t.key !== key));
+  };
+
+  const notifyBackgroundTask = (label, status = 'done') => {
+    const msg = status === 'error' ? `${label} : echec` : `${label} terminee`;
+    toast(msg, status === 'error' ? 'error' : 'success');
+    try {
+      if ('Notification' in window && window.Notification.permission === 'granted') {
+        new window.Notification('MedOutils', { body: msg });
+      }
+    } catch {}
+  };
 
   // Tick durée enregistrement
   useEffect(() => {
@@ -1436,6 +1471,8 @@ Total /${totalPoints}, ensuite cohérent avec une note /20.`,
     setSheetResult(null);
     setSheetFileName(file.name);
     setSheetProcessing(true);
+    const taskKey = `sheet-${Date.now()}`;
+    pushBackgroundTask({ key: taskKey, label: 'Fiche synthese', detail: file.name, targetMode: 'synthese' });
     try {
       const text = await extractPdfTextFromFile(file);
       const parsed = await callOpenAIJson({
@@ -1474,8 +1511,12 @@ Contraintes : francais, phrases courtes, hierarchie claire, pas de blabla, pas d
         const row = await saveStudySheet(sheet.title, file.name, sheet);
         setStudySheets(s => [{ ...row }, ...s]);
       }
+      finishBackgroundTask(taskKey, { status: 'done', label: 'Fiche synthese', targetMode: 'synthese' });
+      notifyBackgroundTask('Fiche synthese');
     } catch (e) {
       setSheetError('Generation impossible : ' + e.message);
+      finishBackgroundTask(taskKey, { status: 'error', error: e.message, targetMode: 'synthese' });
+      notifyBackgroundTask('Fiche synthese', 'error');
     } finally {
       setSheetProcessing(false);
       if (sheetInputRef.current) sheetInputRef.current.value = '';
@@ -1577,12 +1618,18 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
     setFlashcardError(null);
     setFlashcardFileName(file.name);
     setFlashcardProcessing(true);
+    const taskKey = `flashcards-${Date.now()}`;
+    pushBackgroundTask({ key: taskKey, label: 'Flashcards', detail: file.name, targetMode: 'flashcards' });
     try {
       const text = await extractPdfTextFromFile(file);
       const set = await createFlashcardSetFromText({ text, sourceName: file.name, titleHint: file.name.replace(/\.pdf$/i, '') });
       await persistFlashcardSet(set);
+      finishBackgroundTask(taskKey, { status: 'done', label: 'Flashcards', targetMode: 'flashcards' });
+      notifyBackgroundTask('Flashcards');
     } catch (e) {
       setFlashcardError('Generation impossible : ' + e.message);
+      finishBackgroundTask(taskKey, { status: 'error', error: e.message, targetMode: 'flashcards' });
+      notifyBackgroundTask('Flashcards', 'error');
     } finally {
       setFlashcardProcessing(false);
       if (flashcardInputRef.current) flashcardInputRef.current.value = '';
@@ -1595,6 +1642,8 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
     setFlashcardFileName(row.title || row.source_name || '');
     setFlashcardProcessing(true);
     setMode('flashcards');
+    const taskKey = `flashcards-${Date.now()}`;
+    pushBackgroundTask({ key: taskKey, label: 'Flashcards', detail: row.title || row.source_name || 'Fiche synthese', targetMode: 'flashcards' });
     try {
       const set = await createFlashcardSetFromText({
         text: flashcardSourceFromSheet(row),
@@ -1602,8 +1651,12 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
         titleHint: row.data?.title || row.title,
       });
       await persistFlashcardSet(set);
+      finishBackgroundTask(taskKey, { status: 'done', label: 'Flashcards', targetMode: 'flashcards' });
+      notifyBackgroundTask('Flashcards');
     } catch (e) {
       setFlashcardError('Generation impossible : ' + e.message);
+      finishBackgroundTask(taskKey, { status: 'error', error: e.message, targetMode: 'flashcards' });
+      notifyBackgroundTask('Flashcards', 'error');
     } finally {
       setFlashcardProcessing(false);
     }
@@ -1625,13 +1678,15 @@ Contraintes : francais, cartes atomiques, pas de blabla, couvre definitions, dia
     setQcmGenFileName(file.name);
     setQcmGenProcessing(true);
     setQcmGenSaved(false);
+    const taskKey = `qcmgen-${Date.now()}`;
+    pushBackgroundTask({ key: taskKey, label: 'Generation QCM', detail: file.name, targetMode: 'extract' });
     try {
       const text = await extractPdfTextFromFile(file);
-      const parsed = await callOpenAIJson({
-        service: 'qcmgen',
-        temp: 0.25,
-        maxTokens: 6000,
-        system: `Tu es un concepteur de QCM de medecine pour l'externat.
+      const wantedCount = Math.max(1, Math.min(60, Number(qcmGenCount) || 20));
+      const batchSize = providerForService('qcmgen') === 'nvidia' ? 4 : 8;
+      const batches = Math.ceil(wantedCount / batchSize);
+      const sourceLimit = providerForService('qcmgen') === 'nvidia' ? 16000 : 28000;
+      const qcmSystem = `Tu es un concepteur de QCM de medecine pour l'externat.
 Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
 {
   "title": "titre court du deck",
@@ -1643,11 +1698,32 @@ Cree des QCM a partir du cours fourni. Reponds STRICTEMENT en JSON :
     }
   ]
 }
-Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possibles, formulations type examen, pas de QROC, pas d'informations non deductibles du cours.`,
-        user: `Niveau : ${qcmGenLevel}\nNombre de QCM : ${qcmGenCount}\nFichier : ${file.name}\n\nCours :\n${text.slice(0, providerForService('qcmgen') === 'nvidia' ? 28000 : 45000)}`,
-      });
-      const title = parsed.title || file.name.replace(/\.pdf$/i, '');
-      const generated = (Array.isArray(parsed.questions) ? parsed.questions : []).map((q, idx) => ({
+Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possibles, formulations type examen, pas de QROC, pas d'informations non deductibles du cours. Varie les themes, evite les doublons.`;
+      const parsedBatches = [];
+      for (let batch = 0; batch < batches; batch++) {
+        const remaining = wantedCount - (batch * batchSize);
+        const batchCount = Math.min(batchSize, remaining);
+        const maxStart = Math.max(0, text.length - sourceLimit);
+        const start = batches > 1 ? Math.floor(maxStart * (batch / Math.max(1, batches - 1))) : 0;
+        const excerpt = text.slice(start, start + sourceLimit);
+        const parsed = await callOpenAIJson({
+          service: 'qcmgen',
+          temp: 0.25,
+          maxTokens: providerForService('qcmgen') === 'nvidia' ? 2500 : null,
+          system: qcmSystem,
+          user: `Niveau : ${qcmGenLevel}\nLot : ${batch + 1}/${batches}\nNombre de QCM a creer dans ce lot : ${batchCount}\nFichier : ${file.name}\n\nExtrait du cours :\n${excerpt}`,
+        });
+        parsedBatches.push(parsed);
+        finishBackgroundTask(taskKey, {
+          status: 'running',
+          label: 'Generation QCM',
+          detail: `${file.name} - lot ${batch + 1}/${batches}`,
+          targetMode: 'extract',
+        });
+      }
+      const title = parsedBatches.find(p => p?.title)?.title || file.name.replace(/\.pdf$/i, '');
+      const rawQuestions = parsedBatches.flatMap(p => Array.isArray(p?.questions) ? p.questions : []).slice(0, wantedCount);
+      const generated = rawQuestions.map((q, idx) => ({
         id: `gen-${Date.now()}-${idx}`,
         pageNum: '-',
         type: 'qcm',
@@ -1676,9 +1752,13 @@ Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possi
         setDecks(d => [{ id: deck.id, name: deck.name, created_at: deck.created_at, questions: generated }, ...d]);
         setQcmGenSaved(true);
       }
-      setMode('extract');
+      if (modeRef.current === 'qcmgen') setMode('extract');
+      finishBackgroundTask(taskKey, { status: 'done', label: 'Generation QCM', targetMode: 'extract' });
+      notifyBackgroundTask('Generation QCM');
     } catch (e) {
       setQcmGenError('Generation impossible : ' + e.message);
+      finishBackgroundTask(taskKey, { status: 'error', error: e.message, targetMode: 'qcmgen' });
+      notifyBackgroundTask('Generation QCM', 'error');
     } finally {
       setQcmGenProcessing(false);
       if (qcmGenInputRef.current) qcmGenInputRef.current.value = '';
@@ -2824,12 +2904,15 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
   const studySheetRows = useMemo(() => studySheets.filter(s => s.data?.kind !== 'flashcards'), [studySheets]);
   const flashcardRows = useMemo(() => studySheets.filter(s => s.data?.kind === 'flashcards'), [studySheets]);
   const currentFlashcard = flashcardSet?.cards?.[flashcardStudyIdx] || null;
+  const activeBackgroundTask = backgroundTasks.find(t => t.status === 'running') || backgroundTasks[0] || null;
+  const runningBackgroundCount = backgroundTasks.filter(t => t.status === 'running').length;
 
   return (
     <div className="min-h-screen w-full" style={{
       background: '#ffffff', color: '#202124',
       fontFamily: "'Public Sans', system-ui, sans-serif",
       position: 'relative',
+      overflowX: 'hidden',
     }}>
       <div className="paper-grain" aria-hidden="true" />
       <style>{`
@@ -3018,6 +3101,8 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
           from { opacity: 0; transform: translateY(8px) scale(0.98); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes optionShake {
           0%, 100% { transform: translateX(0); }
           20%      { transform: translateX(-4px); }
@@ -3391,6 +3476,34 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
         .badge--perso   { background: #fde8e0; color: #8a3a14; border-color: #f0c8b4; }
         .badge--accent  { background: var(--c-accent-soft); color: var(--c-accent); border-color: rgba(26,111,212,0.22); }
 
+        .task-pill {
+          display: inline-flex; align-items: center; gap: 8px;
+          max-width: min(360px, 42vw);
+          border: 1px solid var(--c-line);
+          border-radius: var(--r-xs);
+          background: var(--c-bg);
+          color: var(--c-ink);
+          padding: 7px 10px;
+          transition: border-color var(--d-fast) var(--ease-out-quart), background var(--d-fast) var(--ease-out-quart);
+        }
+        .task-pill:hover { border-color: var(--c-accent); background: #f7fbff; }
+        .task-dot {
+          width: 7px; height: 7px; border-radius: 999px;
+          background: var(--c-accent);
+          box-shadow: 0 0 0 4px rgba(26,111,212,0.12);
+          flex: 0 0 auto;
+        }
+        .task-dot--done { background: #3b7f2a; box-shadow: 0 0 0 4px rgba(59,127,42,0.12); }
+        .task-dot--error { background: #d93025; box-shadow: 0 0 0 4px rgba(217,48,37,0.12); }
+        .task-spinner {
+          width: 12px; height: 12px; border-radius: 999px;
+          border: 2px solid rgba(26,111,212,0.18);
+          border-top-color: var(--c-accent);
+          animation: spin 800ms linear infinite;
+          flex: 0 0 auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         /* ---------- Deck card (library) — couverture color ---------- */
         .deck-card {
           position: relative; overflow: hidden;
@@ -3437,7 +3550,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
       `}</style>
 
       <a href="#main" className="skip-link">Aller au contenu</a>
-      <header className="border-b" style={{ borderColor: '#dadce0', position: 'relative', zIndex: 3, background: '#ffffff' }}>
+      <header className="border-b" style={{ borderColor: '#dadce0', position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-5 flex items-center justify-between gap-3">
           <div className="flex items-baseline gap-3 cursor-pointer min-w-0 flex-shrink" onClick={() => mode !== 'quiz' && setMode('home')}>
             <h1 className="display text-xl sm:text-2xl md:text-3xl whitespace-nowrap" style={{ fontWeight: 600 }}>MedOutils</h1>
@@ -3457,6 +3570,24 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               <button onClick={() => setMode('library')} className="btn-secondary px-3 py-1.5 text-xs" aria-label={`Mes decks (${decks.length})`}>
                 <IconStar size={13} filled />
                 <span className="ml-1">Mes decks ({decks.length})</span>
+              </button>
+            )}
+            {activeBackgroundTask && (
+              <button
+                type="button"
+                className="task-pill text-xs"
+                onClick={() => {
+                  if (activeBackgroundTask.targetMode) setMode(activeBackgroundTask.targetMode);
+                  if (activeBackgroundTask.status !== 'running') clearBackgroundTask(activeBackgroundTask.key);
+                }}
+                title={activeBackgroundTask.detail || activeBackgroundTask.label}
+              >
+                {activeBackgroundTask.status === 'running'
+                  ? <span className="task-spinner" aria-hidden="true" />
+                  : <span className={`task-dot ${activeBackgroundTask.status === 'error' ? 'task-dot--error' : 'task-dot--done'}`} aria-hidden="true" />}
+                <span className="truncate mono" style={{ letterSpacing: '0.08em' }}>
+                  {runningBackgroundCount > 1 ? `${runningBackgroundCount} TACHES` : activeBackgroundTask.label}
+                </span>
               </button>
             )}
             {supabaseEnabled && (session
@@ -3479,45 +3610,84 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
             onClick={() => setMobileMenuOpen(v => !v)}
           >
             {mobileMenuOpen ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             )}
           </button>
         </div>
+      </header>
 
-        {/* Mobile dropdown panel */}
-        {mobileMenuOpen && (
-          <div className="sm:hidden border-t" style={{ borderColor: '#dadce0', background: '#ffffff' }}>
-            <div className="px-4 py-3 flex flex-col gap-2">
+      {/* Mobile dropdown — overlay + backdrop, scrollable */}
+      {mobileMenuOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Fermer le menu"
+            className="sm:hidden fixed inset-0"
+            style={{ background: 'rgba(26,26,26,0.4)', zIndex: 28, animation: 'fadeIn 180ms ease-out' }}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className="sm:hidden fixed left-0 right-0 border-b"
+            style={{
+              top: 'env(safe-area-inset-top, 0px)',
+              marginTop: 56,
+              borderColor: '#dadce0',
+              background: '#ffffff',
+              zIndex: 29,
+              maxHeight: 'calc(100dvh - 64px)',
+              overflowY: 'auto',
+              boxShadow: 'var(--shadow-modal)',
+              animation: 'slideDown 200ms var(--ease-out-quart)',
+            }}
+            role="menu"
+          >
+            <div className="px-4 py-4 flex flex-col gap-2">
               {mode !== 'home' && mode !== 'qcm' && mode !== 'quiz' && (
-                <button onClick={() => { setMobileMenuOpen(false); reset(); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
-                  <IconPlus size={14} /><span className="ml-2">Nouveau</span>
+                <button onClick={() => { setMobileMenuOpen(false); reset(); }} className="btn-secondary w-full justify-start px-3 py-3 text-sm" role="menuitem">
+                  <IconPlus size={15} /><span className="ml-2">Nouveau</span>
                 </button>
               )}
               {supabaseEnabled && session && (
-                <button onClick={() => { setMobileMenuOpen(false); setMode('library'); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
-                  <IconStar size={14} filled /><span className="ml-2">Mes decks ({decks.length})</span>
+                <button onClick={() => { setMobileMenuOpen(false); setMode('library'); }} className="btn-secondary w-full justify-start px-3 py-3 text-sm" role="menuitem">
+                  <IconStar size={15} filled /><span className="ml-2">Mes decks ({decks.length})</span>
+                </button>
+              )}
+              {activeBackgroundTask && (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (activeBackgroundTask.targetMode) setMode(activeBackgroundTask.targetMode);
+                    if (activeBackgroundTask.status !== 'running') clearBackgroundTask(activeBackgroundTask.key);
+                  }}
+                  className="btn-secondary w-full justify-start px-3 py-3 text-sm"
+                  role="menuitem"
+                >
+                  {activeBackgroundTask.status === 'running'
+                    ? <span className="task-spinner" aria-hidden="true" />
+                    : <span className={`task-dot ${activeBackgroundTask.status === 'error' ? 'task-dot--error' : 'task-dot--done'}`} aria-hidden="true" />}
+                  <span className="ml-2">{runningBackgroundCount > 1 ? `${runningBackgroundCount} tâches en cours` : activeBackgroundTask.label}</span>
                 </button>
               )}
               {supabaseEnabled && (session
-                ? <button onClick={() => { setMobileMenuOpen(false); signOut(); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
-                    <IconX size={14} /><span className="ml-2">Déconnexion</span>
+                ? <button onClick={() => { setMobileMenuOpen(false); signOut(); }} className="btn-secondary w-full justify-start px-3 py-3 text-sm" role="menuitem">
+                    <IconX size={15} /><span className="ml-2">Déconnexion</span>
                   </button>
-                : <button onClick={() => { setMobileMenuOpen(false); setShowAuth(true); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
+                : <button onClick={() => { setMobileMenuOpen(false); setShowAuth(true); }} className="btn-secondary w-full justify-start px-3 py-3 text-sm" role="menuitem">
                     <span className="ml-1">Connexion</span>
                   </button>
               )}
-              <button onClick={() => { setMobileMenuOpen(false); setShowSettings(true); }} className="btn-secondary w-full justify-start px-3 py-2.5 text-sm">
-                <IconCog size={14} /><span className="ml-2">Réglages</span>
+              <button onClick={() => { setMobileMenuOpen(false); setShowSettings(true); }} className="btn-secondary w-full justify-start px-3 py-3 text-sm" role="menuitem">
+                <IconCog size={15} /><span className="ml-2">Réglages</span>
               </button>
               {mode !== 'home' && mode !== 'qcm' && filename && (
-                <p className="mono text-[11px] truncate pt-1 px-1" style={{ color: '#80868b' }}>{filename}</p>
+                <p className="mono text-[11px] truncate pt-2 px-1" style={{ color: '#80868b' }}>{filename}</p>
               )}
             </div>
           </div>
-        )}
-      </header>
+        </>
+      )}
 
       {/* Barre de menu — bascule entre les outils */}
       <nav className="border-b" style={{ borderColor: '#dadce0', background: '#ffffff', position: 'relative', zIndex: 2 }}>
