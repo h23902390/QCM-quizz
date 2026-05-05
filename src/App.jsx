@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   supabase, supabaseEnabled,
-  listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey,
+  listDecks, saveDeck, updateDeckQuestions, deleteDeck, saveApiKey, saveUserSettings,
   listStudySheets, saveStudySheet, deleteStudySheet,
   listEcosCases, upsertEcosCases, deleteEcosCase as deleteEcosCaseRemote,
   listEcosAttempts, upsertEcosAttempt,
@@ -1918,16 +1918,57 @@ Contraintes :
     // Refresh user from server pour avoir la dernière clé API (sync multi-appareils)
     supabase.auth.getUser().then(({ data }) => {
       const meta = data?.user?.user_metadata || session.user?.user_metadata || {};
+      const toPush = {};
       if (meta.openai_key && meta.openai_key !== apiKey) {
         setApiKey(meta.openai_key);
         try { localStorage.setItem('openai_key', meta.openai_key); } catch {}
       } else if (!meta.openai_key && apiKey) {
-        // Push la cle locale vers Supabase (cas: cle saisie avant login)
-        saveApiKey(apiKey).catch(e => console.warn('saveApiKey push', e));
+        toPush.openai_key = apiKey;
       }
-      if (meta.model && meta.model !== model) {
-        setModel(meta.model);
-        try { localStorage.setItem('model', meta.model); } catch {}
+      const remoteOpenAiModel = meta.openai_model || meta.model;
+      if (remoteOpenAiModel && remoteOpenAiModel !== model) {
+        setModel(remoteOpenAiModel);
+        try { localStorage.setItem('openai_model', remoteOpenAiModel); } catch {}
+      } else if (!remoteOpenAiModel && model) {
+        toPush.openai_model = model;
+      }
+      if (typeof meta.nvidia_backend_enabled === 'boolean') {
+        setNvidiaBackendEnabled(meta.nvidia_backend_enabled);
+        try { localStorage.setItem('nvidia_backend_enabled', String(meta.nvidia_backend_enabled)); } catch {}
+      } else {
+        toPush.nvidia_backend_enabled = nvidiaBackendEnabled;
+      }
+      if (meta.nvidia_model) {
+        const normalized = normalizeNvidiaModel(meta.nvidia_model);
+        setNvidiaModel(normalized);
+        try { localStorage.setItem('nvidia_model', normalized); } catch {}
+      } else if (nvidiaModel) {
+        toPush.nvidia_model = nvidiaModel;
+      }
+      if (meta.ai_service_providers && typeof meta.ai_service_providers === 'object') {
+        const providers = { ...DEFAULT_AI_SERVICE_PROVIDERS, ...meta.ai_service_providers };
+        setAiServiceProviders(providers);
+        try { localStorage.setItem('ai_service_providers', JSON.stringify(providers)); } catch {}
+      } else {
+        toPush.ai_service_providers = aiServiceProviders;
+      }
+      if (meta.transcription_provider) {
+        setTranscriptionProvider(meta.transcription_provider);
+        try { localStorage.setItem('transcription_provider', meta.transcription_provider); } catch {}
+      } else {
+        toPush.transcription_provider = transcriptionProvider;
+      }
+      if (meta.groq_key && meta.groq_key !== groqApiKey) {
+        setGroqApiKey(meta.groq_key);
+        try { localStorage.setItem('groq_key', meta.groq_key); } catch {}
+      } else if (!meta.groq_key && groqApiKey) {
+        toPush.groq_key = groqApiKey;
+      }
+      if (meta.groq_transcription_model) {
+        setGroqTranscriptionModel(meta.groq_transcription_model);
+        try { localStorage.setItem('groq_transcription_model', meta.groq_transcription_model); } catch {}
+      } else if (groqTranscriptionModel) {
+        toPush.groq_transcription_model = groqTranscriptionModel;
       }
       if (meta.doctor_name) {
         setEntDoctorName(meta.doctor_name);
@@ -1936,6 +1977,9 @@ Contraintes :
       if (meta.doctor_signature) {
         setEntDoctorSignature(meta.doctor_signature);
         try { localStorage.setItem('doctor_signature', meta.doctor_signature); } catch {}
+      }
+      if (Object.keys(toPush).length) {
+        saveUserSettings(toPush).catch(e => console.warn('saveUserSettings push', e));
       }
     }).catch(e => console.warn('getUser', e));
     listDecks().then(setDecks).catch(e => console.warn('listDecks', e));
@@ -1977,6 +2021,11 @@ Contraintes :
     allEcosCases.filter(c => ecosCategory === 'all' ? true : c.specialite === ecosCategory)
   ), [allEcosCases, ecosCategory]);
 
+  const syncAiSettings = (patch) => {
+    if (!session) return;
+    saveUserSettings(patch).catch(e => console.warn('saveUserSettings', e));
+  };
+
   const persistKey = (k) => {
     setApiKey(k);
     try { localStorage.setItem('openai_key', k); } catch {}
@@ -1985,32 +2034,39 @@ Contraintes :
   const persistModel = (m) => {
     setModel(m);
     try { localStorage.setItem('openai_model', m); } catch {}
+    syncAiSettings({ openai_model: m });
   };
   const persistNvidiaBackendEnabled = (v) => {
     setNvidiaBackendEnabled(v);
     try { localStorage.setItem('nvidia_backend_enabled', String(v)); } catch {}
+    syncAiSettings({ nvidia_backend_enabled: v });
   };
   const persistNvidiaModel = (m) => {
     const normalized = normalizeNvidiaModel(m);
     setNvidiaModel(normalized);
     try { localStorage.setItem('nvidia_model', normalized); } catch {}
+    syncAiSettings({ nvidia_model: normalized });
   };
   const persistTranscriptionProvider = (provider) => {
     setTranscriptionProvider(provider);
     try { localStorage.setItem('transcription_provider', provider); } catch {}
+    syncAiSettings({ transcription_provider: provider });
   };
   const persistGroqApiKey = (key) => {
     setGroqApiKey(key);
     try { localStorage.setItem('groq_key', key); } catch {}
+    syncAiSettings({ groq_key: key });
   };
   const persistGroqTranscriptionModel = (nextModel) => {
     setGroqTranscriptionModel(nextModel);
     try { localStorage.setItem('groq_transcription_model', nextModel); } catch {}
+    syncAiSettings({ groq_transcription_model: nextModel });
   };
   const persistAiServiceProvider = (service, provider) => {
     setAiServiceProviders(prev => {
       const next = { ...prev, [service]: provider };
       try { localStorage.setItem('ai_service_providers', JSON.stringify(next)); } catch {}
+      syncAiSettings({ ai_service_providers: next });
       return next;
     });
   };

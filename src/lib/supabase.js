@@ -195,3 +195,8 @@ export async function saveApiKey(key) {
   const { error } = await supabase.auth.updateUser({ data: { openai_key: key } });
   if (error) throw error;
 }
+
+export async function saveUserSettings(settings) {
+  const { error } = await supabase.auth.updateUser({ data: settings || {} });
+  if (error) throw error;
+}
