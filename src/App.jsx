@@ -226,6 +226,7 @@ const AI_SERVICES = [
   { key: 'verifier', label: 'Verificateur QCM' },
   { key: 'entretien', label: 'Entretien documents' },
 ];
+const ECOS_PATIENT_NVIDIA_MODEL = 'nvidia/nemotron-3-nano-30b-a3b';
 const normalizeNvidiaModel = (value) => {
   const modelName = (value || '').trim();
   if (!modelName || modelName === 'z-ai/glm-4.7') return 'z-ai/glm4.7';
@@ -1126,14 +1127,17 @@ ${entTranscript}`,
     setEcosInput('');
     setEcosSending(true);
     try {
+      const recentMessages = newMessages.slice(-7);
       const body = {
         model,
+        nvidiaModelOverride: ECOS_PATIENT_NVIDIA_MODEL,
         messages: [
-          { role: 'system', content: `${ecosCase.briefPatient}\n\nRÈGLES IMPORTANTES:\n- Réponds uniquement à la question posée par le candidat.\n- Sois précise et non évasive sur les symptômes/antécédents quand on te les demande.\n- N'ajoute pas spontanément des informations qui n'ont pas été demandées.` },
-          ...newMessages,
+          { role: 'system', content: `${ecosCase.briefPatient}\n\nREGLES IMPORTANTES:\n- Tu joues uniquement le role du patient simule.\n- Reponds comme un vrai patient, pas comme un medecin.\n- Ne donne jamais le diagnostic.\n- Reponds en 1 a 3 phrases maximum.\n- Ne revele une information que si l'etudiant pose la bonne question.\n- Si la question est vague, reponds vaguement.\n- Pas de liste, pas de raisonnement medical, pas de conseil.` },
+          ...recentMessages,
         ],
-        temperature: 0.2,
-        max_tokens: 280,
+        temperature: 0.6,
+        top_p: 0.9,
+        max_tokens: 70,
         chat_template_kwargs: { enable_thinking: false },
       };
       const data = await chatCompletion('ecos', body);
@@ -1824,8 +1828,15 @@ Contraintes :
   );
   const chatCompletion = async (service, body) => {
     const provider = providerForService(service);
-    const finalBody = { ...body, model: provider === 'nvidia' ? nvidiaModel : model };
-    if (provider !== 'nvidia') delete finalBody.chat_template_kwargs;
+    const { nvidiaModelOverride, ...requestBody } = body || {};
+    const finalBody = {
+      ...requestBody,
+      model: provider === 'nvidia' ? (nvidiaModelOverride || nvidiaModel) : model,
+    };
+    if (provider !== 'nvidia') {
+      delete finalBody.chat_template_kwargs;
+      delete finalBody.top_p;
+    }
     const resp = await fetch(provider === 'nvidia' ? '/api/ai-chat' : 'https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: provider === 'nvidia'
