@@ -646,10 +646,10 @@ export default function App() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       entStreamRef.current = stream;
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      const entMimeCandidates = transcriptionProvider === 'nvidia'
+        ? ['audio/ogg;codecs=opus', 'audio/ogg', 'audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        : ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      const mimeType = entMimeCandidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
       const mr = mimeType ? new MediaRecorder(stream, { mimeType, audioBitsPerSecond: 64000 }) : new MediaRecorder(stream);
       entChunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) entChunksRef.current.push(e.data); };
@@ -3370,7 +3370,7 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
               <option value="nvidia" disabled={!nvidiaBackendEnabled}>NVIDIA Parakeet ASR</option>
             </select>
             <p className="text-xs mb-5" style={{ color: '#8a8a8a' }}>
-              NVIDIA ASR utilise <code className="mono">NVIDIA_API_KEY</code> cote Vercel. Limite officielle de duree non retrouvee : l'app decoupe en petits morceaux pour tester proprement.
+              NVIDIA ASR utilise <code className="mono">NVIDIA_API_KEY</code> cote Vercel. Format conseille : WAV mono 16-bit ou OGG/OPUS. Limite officielle de duree non retrouvee : l'app decoupe en petits morceaux pour tester proprement.
             </p>
             <label className="flex items-center gap-3 mb-4 cursor-pointer">
               <span className="switch">
