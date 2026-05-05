@@ -3247,12 +3247,15 @@ Contraintes :
 
         {mode === 'ecos' && ecosCase && (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-4 pb-4 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div>
-                <h2 className="display text-2xl mb-1" style={{ fontWeight: 600 }}>{ecosCase.titre}</h2>
-                <div className="mono text-xs" style={{ color: '#5a5a5a' }}>
-                  {ecosCase.specialite} · {ecosCase.duree} min
+            <div className="flex flex-wrap items-end justify-between gap-4 mb-6 pb-5 border-b" style={{ borderColor: 'var(--c-line)', paddingTop: 'clamp(12px, 2vw, 24px)' }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-accent)', letterSpacing: '0.22em', textTransform: 'uppercase' }}>
+                  {ecosCase.specialite} · {ecosCase.duree} min · cas en cours
                 </div>
+                <h1 className="display" style={{
+                  fontWeight: 600, fontSize: 'clamp(24px, 3.4vw, 40px)',
+                  lineHeight: 1.1, letterSpacing: '-0.02em',
+                }}>{ecosCase.titre}</h1>
               </div>
               <div className="flex gap-2 items-center">
                 {(() => {
@@ -3303,28 +3306,33 @@ Contraintes :
               </div>
             )}
 
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="md:col-span-1 p-5 border self-start" style={{ borderColor: '#d6d0c1', background: '#fff' }}>
-                <div className="text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Consigne candidat</div>
-                <div className="text-sm" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{cleanMarkdownNoise(ecosCase.consigneCandidat)}</div>
+            <div className="grid md:grid-cols-3 gap-5">
+              <div className="md:col-span-1 p-6 self-start" style={{ background: 'var(--c-surface)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)' }}>
+                <Eyebrow accent>Consigne candidat</Eyebrow>
+                <div className="text-sm mt-4" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--c-ink)' }}>{cleanMarkdownNoise(ecosCase.consigneCandidat)}</div>
               </div>
 
-              <div className="md:col-span-2 border flex flex-col" style={{ borderColor: '#d6d0c1', background: '#fff', minHeight: '60vh' }}>
+              <div className="md:col-span-2 flex flex-col" style={{ border: '1px solid var(--c-line)', background: 'var(--c-surface)', borderRadius: 'var(--r-md)', minHeight: '60vh' }}>
                 <div ref={ecosScrollRef} className="flex-1 overflow-y-auto scrollbar p-4 space-y-3" style={{ maxHeight: '60vh' }}>
                   {ecosMessages.length === 0 && (
-                    <div className="text-sm italic" style={{ color: '#8a8a8a' }}>
-                      Le patient attend. Commence ton interrogatoire (présentation, motif, anamnèse…).
+                    <div className="text-center py-12" style={{ color: 'var(--c-ink-mute)' }}>
+                      <div className="mono text-[10px] mb-3" style={{ letterSpacing: '0.22em', textTransform: 'uppercase' }}>Patient en attente</div>
+                      <div className="text-sm italic" style={{ color: 'var(--c-ink-soft)' }}>
+                        Commence ton interrogatoire — présentation, motif, anamnèse…
+                      </div>
                     </div>
                   )}
                   {ecosMessages.map((m, i) => (
                     <div key={i} className={`flex chat-bubble ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className="max-w-[85%] p-3 text-sm" style={{
-                        background: m.role === 'user' ? '#1a1a1a' : '#f6f3ec',
-                        color: m.role === 'user' ? '#f6f3ec' : '#1a1a1a',
+                      <div className="max-w-[85%] px-4 py-3 text-sm" style={{
+                        background: m.role === 'user' ? 'var(--c-ink)' : 'var(--c-bg)',
+                        color: m.role === 'user' ? 'var(--c-bg)' : 'var(--c-ink)',
+                        border: m.role === 'user' ? 'none' : '1px solid var(--c-line)',
                         borderRadius: 'var(--r-sm)', whiteSpace: 'pre-wrap',
+                        lineHeight: 1.5,
                       }}>
-                        <div className="mono text-xs mb-1" style={{ opacity: 0.6 }}>
-                          {m.role === 'user' ? 'Vous (médecin)' : 'Patient'}
+                        <div className="mono text-[9px] mb-1.5" style={{ opacity: 0.65, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                          {m.role === 'user' ? 'Médecin' : 'Patient'}
                         </div>
                         {m.content}
                       </div>
@@ -3332,7 +3340,7 @@ Contraintes :
                   ))}
                   {ecosSending && (
                     <div className="flex justify-start chat-bubble">
-                      <div className="p-3 text-sm italic flex items-center gap-2" style={{ background: '#f6f3ec', color: '#8a8a8a', borderRadius: 'var(--r-sm)' }}>
+                      <div className="px-4 py-3 text-sm italic flex items-center gap-2" style={{ background: 'var(--c-bg)', color: 'var(--c-ink-mute)', border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)' }}>
                         <span>Le patient réfléchit</span>
                         <span className="think-dot">·</span>
                         <span className="think-dot">·</span>
@@ -3342,7 +3350,7 @@ Contraintes :
                   )}
                 </div>
 
-                <div className="border-t p-3" style={{ borderColor: '#d6d0c1' }}>
+                <div className="border-t p-4" style={{ borderColor: 'var(--c-line)' }}>
                   {ecosError && (
                     <div className="text-xs mb-2" style={{ color: '#b54125' }}>{ecosError}</div>
                   )}
