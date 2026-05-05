@@ -3843,58 +3843,93 @@ Contraintes :
             {quizStats.total > 0 && quizStats.correct === quizStats.total && (
               <Confetti />
             )}
-            <div className="text-center py-8 mb-8 border-b" style={{ borderColor: '#d6d0c1' }}>
-              <div className="display text-5xl mb-2 score-reveal" style={{ fontWeight: 600 }}>
-                {quizStats.correct} / {quizStats.total}
-              </div>
-              <div className="text-sm anim-fade-up anim-stagger-2" style={{ color: '#5a5a5a' }}>
-                {Math.round((quizStats.correct / quizStats.total) * 100)} % de bonnes réponses
-              </div>
-              <div className="flex justify-center gap-4 mt-4 mono text-sm anim-fade-up anim-stagger-3">
-                <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct} correctes</span>
-                {quizStats.partial > 0 && <span style={{ color: '#c4a84d' }}>~ {quizStats.partial} partielles</span>}
-                <span style={{ color: '#b54125' }}>✗ {quizStats.incorrect} incorrectes</span>
-              </div>
-              <div className="flex justify-center gap-2 mt-6 anim-fade-up anim-stagger-4">
-                <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Refaire (aléatoire)</button>
-                <button onClick={() => {
-                  const errs = results.filter(r => r.feedback?.verdict !== 'correct').map(r => r.question);
-                  if (errs.length === 0) return;
-                  setQuizQuestions([...errs].sort(() => Math.random() - 0.5));
-                  setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
-                  setMode('quiz');
-                }} disabled={quizStats.incorrect + quizStats.partial === 0}
-                  className="btn-primary px-4 py-2 text-sm">Refaire les erreurs ({quizStats.incorrect + quizStats.partial})</button>
-              </div>
-            </div>
-
-            <h3 className="display text-xl mb-4" style={{ fontWeight: 600 }}>Détail</h3>
-            <div className="space-y-3">
-              {results.map((r, i) => (
-                <div key={i} className="p-4 border" style={{
-                  borderColor: '#d6d0c1', background: '#fff',
-                  borderLeftWidth: 3,
-                  borderLeftColor: r.feedback?.verdict === 'correct' ? '#6b9d4d'
-                                 : r.feedback?.verdict === 'partiel' ? '#c4a84d' : '#b54125',
+            {/* Hero score — éditorial */}
+            <section className="section-macro" style={{ paddingTop: 'clamp(32px, 5vw, 72px)', paddingBottom: 'clamp(28px, 4vw, 56px)' }}>
+              <Reveal>
+                <Eyebrow accent>Quiz terminé</Eyebrow>
+              </Reveal>
+              <Reveal delay={80}>
+                <div className="display score-reveal mt-6" style={{
+                  fontWeight: 600,
+                  fontSize: 'clamp(72px, 14vw, 180px)',
+                  lineHeight: 0.9,
+                  letterSpacing: '-0.045em',
                 }}>
-                  <div className="flex items-baseline justify-between mb-2">
-                    <span className="mono text-xs" style={{ color: '#8a8a8a' }}>
-                      {i + 1}. {r.question.type.toUpperCase()} · p.{r.question.pageNum}
-                    </span>
-                    <span className="text-xs">
-                      {r.feedback?.verdict === 'correct' ? '✓' : r.feedback?.verdict === 'partiel' ? '~' : '✗'}
-                    </span>
-                  </div>
-                  <div className="text-sm mb-2" style={{ whiteSpace: 'pre-wrap' }}>{r.question.enonce}</div>
-                  <div className="text-xs grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div><strong>Ta réponse :</strong> {r.feedback?.userValue}</div>
-                    <div><strong>Attendue :</strong> {r.feedback?.expected}</div>
-                  </div>
-                  {r.feedback?.explanation && r.feedback.verdict !== 'correct' && (
-                    <div className="text-xs mt-2 italic" style={{ color: '#5a5a5a' }}>{r.feedback.explanation}</div>
-                  )}
+                  {quizStats.correct}<span style={{ color: 'var(--c-ink-mute)', fontWeight: 400 }}>/{quizStats.total}</span>
                 </div>
-              ))}
+              </Reveal>
+              <Reveal delay={140}>
+                <div className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-2 mono text-xs" style={{ letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+                  <span style={{ color: 'var(--c-ink)' }}>{Math.round((quizStats.correct / quizStats.total) * 100)} % réussite</span>
+                  <span style={{ color: '#6b9d4d' }}>✓ {quizStats.correct} correctes</span>
+                  {quizStats.partial > 0 && <span style={{ color: '#c4a84d' }}>~ {quizStats.partial} partielles</span>}
+                  <span style={{ color: 'var(--c-accent)' }}>✗ {quizStats.incorrect} incorrectes</span>
+                </div>
+              </Reveal>
+              <Reveal delay={200}>
+                <div className="flex flex-wrap gap-3 mt-8">
+                  <button onClick={() => startQuiz(true)} className="btn-secondary px-4 py-2 text-sm">Refaire (aléatoire)</button>
+                  <button onClick={() => {
+                    const errs = results.filter(r => r.feedback?.verdict !== 'correct').map(r => r.question);
+                    if (errs.length === 0) return;
+                    setQuizQuestions([...errs].sort(() => Math.random() - 0.5));
+                    setQuizIdx(0); setUserAnswer({}); setFeedback(null); setResults([]);
+                    setMode('quiz');
+                  }} disabled={quizStats.incorrect + quizStats.partial === 0}
+                    className="btn-primary px-4 py-2 text-sm">Refaire les erreurs ({quizStats.incorrect + quizStats.partial})</button>
+                </div>
+              </Reveal>
+            </section>
+
+            <div className="section-divider" />
+
+            {/* Détail des réponses */}
+            <Reveal>
+              <div className="flex items-baseline justify-between mb-6">
+                <Eyebrow>Détail — {results.length} question{results.length > 1 ? 's' : ''}</Eyebrow>
+              </div>
+            </Reveal>
+            <div className="space-y-3">
+              {results.map((r, i) => {
+                const v = r.feedback?.verdict;
+                const verdictMeta = v === 'correct'
+                  ? { label: 'CORRECT', color: '#2d5a1a', bg: '#e6f3e0', border: '#9ec28f' }
+                  : v === 'partiel'
+                    ? { label: 'PARTIEL', color: '#5a4a10', bg: '#fff8e0', border: '#c4a84d' }
+                    : { label: 'INCORRECT', color: '#6b1f0a', bg: '#f8e0d6', border: '#dfa493' };
+                return (
+                  <div key={i} className="p-5" style={{
+                    background: 'var(--c-surface)', border: '1px solid var(--c-line)',
+                    borderRadius: 'var(--r-md)',
+                  }}>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="mono text-[10px]" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>
+                        {String(i + 1).padStart(2, '0')} · {r.question.type.toUpperCase()} · P.{r.question.pageNum}
+                      </span>
+                      <span className="ml-auto mono text-[10px] px-2 py-0.5" style={{
+                        background: verdictMeta.bg, color: verdictMeta.color,
+                        border: `1px solid ${verdictMeta.border}`, letterSpacing: '0.12em',
+                      }}>{verdictMeta.label}</span>
+                    </div>
+                    <div className="text-sm mb-3" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.question.enonce}</div>
+                    <div className="text-xs grid grid-cols-1 md:grid-cols-2 gap-3 pt-3" style={{ borderTop: '1px solid var(--c-line)' }}>
+                      <div>
+                        <div className="mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>TA RÉPONSE</div>
+                        <div>{r.feedback?.userValue || <span style={{ color: 'var(--c-ink-mute)' }}>—</span>}</div>
+                      </div>
+                      <div>
+                        <div className="mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.18em' }}>ATTENDUE</div>
+                        <div>{r.feedback?.expected || <span style={{ color: 'var(--c-ink-mute)' }}>—</span>}</div>
+                      </div>
+                    </div>
+                    {r.feedback?.explanation && v !== 'correct' && (
+                      <div className="text-xs mt-3 pt-3 italic" style={{ color: 'var(--c-ink-soft)', borderTop: '1px solid var(--c-line)', lineHeight: 1.5 }}>
+                        {r.feedback.explanation}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
