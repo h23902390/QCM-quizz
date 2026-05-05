@@ -287,7 +287,17 @@ const DEFAULT_AI_SERVICE_PROVIDERS = {
 };
 const AI_SERVICES = [
   { key: 'qroc', label: 'Correction QROC' },
-  { key: 'ecos', label: 'ECOS patient + evaluation' },
+  { key: 'ecos', label: 'ECOS correction / import' },
+  { key: 'synthese', label: 'Fiches synthese' },
+  { key: 'flashcards', label: 'Flashcards' },
+  { key: 'qcmgen', label: 'Generateur QCM' },
+  { key: 'verifier', label: 'Verificateur QCM' },
+  { key: 'entretien', label: 'Entretien documents' },
+];
+const NVIDIA_CONFIG_SERVICES = [
+  { key: 'qroc', label: 'Correction QROC' },
+  { key: 'ecosPatient', label: 'ECOS patient simule' },
+  { key: 'ecos', label: 'ECOS correction / import' },
   { key: 'synthese', label: 'Fiches synthese' },
   { key: 'flashcards', label: 'Flashcards' },
   { key: 'qcmgen', label: 'Generateur QCM' },
@@ -300,6 +310,21 @@ const GROQ_TRANSCRIPTION_MODELS = [
 ];
 const GROQ_TRANSCRIPTION_USAGE_KEY = 'groq_transcription_usage_v1';
 const ECOS_PATIENT_NVIDIA_MODEL = 'nvidia/nemotron-3-nano-30b-a3b';
+const NVIDIA_MODEL_PRESETS = [
+  { value: 'z-ai/glm4.7', label: 'GLM 4.7', hint: 'raisonnement/correction' },
+  { value: 'nvidia/nemotron-3-nano-30b-a3b', label: 'Nemotron 3 Nano', hint: 'rapide patient ECOS' },
+  { value: 'nvidia/mistral-nemo-minitron-8b-base', label: 'Minitron 8B', hint: 'tres rapide a tester' },
+];
+const DEFAULT_NVIDIA_SERVICE_SETTINGS = {
+  qroc: { model: 'z-ai/glm4.7', temperature: 0.25, topP: 0.9, maxTokens: 2500, thinking: false },
+  ecosPatient: { model: ECOS_PATIENT_NVIDIA_MODEL, temperature: 0.6, topP: 0.9, maxTokens: 70, thinking: false },
+  ecos: { model: 'z-ai/glm4.7', temperature: 0, topP: 0.9, maxTokens: 5000, thinking: true },
+  synthese: { model: 'z-ai/glm4.7', temperature: 0.15, topP: 0.9, maxTokens: 5000, thinking: false },
+  flashcards: { model: 'z-ai/glm4.7', temperature: 0.18, topP: 0.9, maxTokens: 5000, thinking: false },
+  qcmgen: { model: 'z-ai/glm4.7', temperature: 0.25, topP: 0.9, maxTokens: 2500, thinking: false },
+  verifier: { model: 'z-ai/glm4.7', temperature: 0.1, topP: 0.9, maxTokens: 2500, thinking: true },
+  entretien: { model: 'z-ai/glm4.7', temperature: 0.2, topP: 0.9, maxTokens: 5000, thinking: false },
+};
 const normalizeNvidiaModel = (value) => {
   const modelName = (value || '').trim();
   if (!modelName || modelName === 'z-ai/glm-4.7') return 'z-ai/glm4.7';
@@ -404,6 +429,13 @@ export default function App() {
   const [model, setModel] = useState(() => localStorage.getItem('openai_model') || 'gpt-5.4-mini');
   const [nvidiaBackendEnabled, setNvidiaBackendEnabled] = useState(() => localStorage.getItem('nvidia_backend_enabled') === 'true');
   const [nvidiaModel, setNvidiaModel] = useState(() => normalizeNvidiaModel(localStorage.getItem('nvidia_model')));
+  const [nvidiaServiceSettings, setNvidiaServiceSettings] = useState(() => {
+    try {
+      return { ...DEFAULT_NVIDIA_SERVICE_SETTINGS, ...(JSON.parse(localStorage.getItem('nvidia_service_settings') || '{}')) };
+    } catch {
+      return DEFAULT_NVIDIA_SERVICE_SETTINGS;
+    }
+  });
   const [transcriptionProvider, setTranscriptionProvider] = useState(() => localStorage.getItem('transcription_provider') || 'openai');
   const [groqApiKey, setGroqApiKey] = useState(() => localStorage.getItem('groq_key') || '');
   const [groqTranscriptionModel, setGroqTranscriptionModel] = useState(() => localStorage.getItem('groq_transcription_model') || 'whisper-large-v3-turbo');
@@ -1264,15 +1296,11 @@ ${entTranscript}`,
       const recentMessages = newMessages.slice(-7);
       const body = {
         model,
-        nvidiaModelOverride: ECOS_PATIENT_NVIDIA_MODEL,
+        nvidiaServiceOverride: 'ecosPatient',
         messages: [
           { role: 'system', content: `${ecosCase.briefPatient}\n\nREGLES IMPORTANTES:\n- Tu joues uniquement le role du patient simule.\n- Reponds comme un vrai patient, pas comme un medecin.\n- Ne donne jamais le diagnostic.\n- Reponds en 1 a 3 phrases maximum.\n- Ne revele une information que si l'etudiant pose la bonne question.\n- Si la question est vague, reponds vaguement.\n- Pas de liste, pas de raisonnement medical, pas de conseil.` },
           ...recentMessages,
         ],
-        temperature: 0.6,
-        top_p: 0.9,
-        max_tokens: 70,
-        chat_template_kwargs: { enable_thinking: false },
       };
       const data = await chatCompletion('ecos', body);
       const reply = data.choices?.[0]?.message?.content || '...';
@@ -1744,7 +1772,7 @@ Contraintes : 5 options A-E par question, une ou plusieurs bonnes reponses possi
         const parsed = await callOpenAIJson({
           service: 'qcmgen',
           temp: 0.25,
-          maxTokens: providerForService('qcmgen') === 'nvidia' ? 2500 : null,
+          maxTokens: null,
           system: qcmSystem,
           user: `Niveau : ${qcmGenLevel}\nLot : ${batch + 1}/${batches}\nNombre de QCM a creer dans ce lot : ${batchCount}\nFichier : ${file.name}\n\nExtrait du cours :\n${excerpt}`,
         });
@@ -1981,6 +2009,13 @@ Contraintes :
       } else if (nvidiaModel) {
         toPush.nvidia_model = nvidiaModel;
       }
+      if (meta.nvidia_service_settings && typeof meta.nvidia_service_settings === 'object') {
+        const settings = { ...DEFAULT_NVIDIA_SERVICE_SETTINGS, ...meta.nvidia_service_settings };
+        setNvidiaServiceSettings(settings);
+        try { localStorage.setItem('nvidia_service_settings', JSON.stringify(settings)); } catch {}
+      } else {
+        toPush.nvidia_service_settings = nvidiaServiceSettings;
+      }
       if (meta.ai_service_providers && typeof meta.ai_service_providers === 'object') {
         const providers = { ...DEFAULT_AI_SERVICE_PROVIDERS, ...meta.ai_service_providers };
         setAiServiceProviders(providers);
@@ -2083,6 +2118,23 @@ Contraintes :
     try { localStorage.setItem('nvidia_model', normalized); } catch {}
     syncAiSettings({ nvidia_model: normalized });
   };
+  const persistNvidiaServiceSetting = (service, key, value) => {
+    setNvidiaServiceSettings(prev => {
+      const current = prev[service] || DEFAULT_NVIDIA_SERVICE_SETTINGS[service] || {};
+      const nextService = {
+        ...current,
+        [key]: key === 'model' ? normalizeNvidiaModel(value) : value,
+      };
+      const next = { ...prev, [service]: nextService };
+      try { localStorage.setItem('nvidia_service_settings', JSON.stringify(next)); } catch {}
+      syncAiSettings({ nvidia_service_settings: next });
+      return next;
+    });
+  };
+  const nvidiaSettingsFor = (service) => ({
+    ...(DEFAULT_NVIDIA_SERVICE_SETTINGS[service] || {}),
+    ...(nvidiaServiceSettings[service] || {}),
+  });
   const persistTranscriptionProvider = (provider) => {
     setTranscriptionProvider(provider);
     try { localStorage.setItem('transcription_provider', provider); } catch {}
@@ -2118,11 +2170,18 @@ Contraintes :
   );
   const chatCompletion = async (service, body) => {
     const provider = providerForService(service);
-    const { nvidiaModelOverride, ...requestBody } = body || {};
+    const { nvidiaModelOverride, nvidiaServiceOverride, ...requestBody } = body || {};
+    const serviceSettings = provider === 'nvidia' ? nvidiaSettingsFor(nvidiaServiceOverride || service) : null;
     const finalBody = {
       ...requestBody,
-      model: provider === 'nvidia' ? (nvidiaModelOverride || nvidiaModel) : model,
+      model: provider === 'nvidia' ? (nvidiaModelOverride || serviceSettings?.model || nvidiaModel) : model,
     };
+    if (provider === 'nvidia' && serviceSettings) {
+      if (serviceSettings.temperature !== undefined) finalBody.temperature = Number(serviceSettings.temperature);
+      if (serviceSettings.topP !== undefined) finalBody.top_p = Number(serviceSettings.topP);
+      if (serviceSettings.maxTokens !== undefined) finalBody.max_tokens = Number(serviceSettings.maxTokens);
+      finalBody.chat_template_kwargs = { enable_thinking: !!serviceSettings.thinking };
+    }
     if (provider !== 'nvidia') {
       delete finalBody.chat_template_kwargs;
       delete finalBody.top_p;
@@ -3908,9 +3967,9 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                   <input type="checkbox" checked={nvidiaBackendEnabled} onChange={e => persistNvidiaBackendEnabled(e.target.checked)} />
                   <span className="slider" />
                 </span>
-                <span className="text-sm">Activer NVIDIA via backend</span>
+                <span className="text-sm">Activer les modeles NVIDIA serveur</span>
               </label>
-              <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele NVIDIA</label>
+              <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: '#8a8a8a' }}>Modele NVIDIA par defaut</label>
               <input type="text" value={nvidiaModel} onChange={e => persistNvidiaModel(e.target.value)} className="input-field w-full mb-3" placeholder="z-ai/glm4.7" />
               <div className="grid md:grid-cols-2 gap-3">
                 {AI_SERVICES.map(svc => (
@@ -3922,13 +3981,74 @@ Si la question ressemble a une situation personnelle, reste pedagogique et ajout
                       className="input-field w-full text-xs"
                     >
                       <option value="openai">OpenAI perso</option>
-                      <option value="nvidia" disabled={!nvidiaBackendEnabled}>NVIDIA backend</option>
+                      <option value="nvidia" disabled={!nvidiaBackendEnabled}>NVIDIA serveur</option>
                     </select>
                   </label>
                 ))}
               </div>
+              <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--c-line)' }}>
+                <div className="mono text-[10px] mb-3" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>Parametres NVIDIA par outil</div>
+                <div className="space-y-3">
+                  {NVIDIA_CONFIG_SERVICES.map(svc => {
+                    const cfg = nvidiaSettingsFor(svc.key);
+                    return (
+                      <div key={svc.key} className="p-3" style={{ background: '#fff', border: '1px solid var(--c-line)', borderRadius: 'var(--r-sm)' }}>
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <span className="text-xs" style={{ fontWeight: 600 }}>{svc.label}</span>
+                          <label className="flex items-center gap-2 text-[11px]" style={{ color: 'var(--c-ink-soft)' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!cfg.thinking}
+                              onChange={e => persistNvidiaServiceSetting(svc.key, 'thinking', e.target.checked)}
+                            />
+                            Raisonnement
+                          </label>
+                        </div>
+                        <div className="grid md:grid-cols-4 gap-2">
+                          <label className="text-[11px] md:col-span-2">
+                            <span className="block mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Modele</span>
+                            <input
+                              list={`nvidia-models-${svc.key}`}
+                              value={cfg.model || ''}
+                              onChange={e => persistNvidiaServiceSetting(svc.key, 'model', e.target.value)}
+                              className="input-field w-full text-xs"
+                            />
+                            <datalist id={`nvidia-models-${svc.key}`}>
+                              {NVIDIA_MODEL_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label} - {p.hint}</option>)}
+                            </datalist>
+                          </label>
+                          <label className="text-[11px]">
+                            <span className="block mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Temp.</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max="1"
+                              step="0.05"
+                              value={cfg.temperature}
+                              onChange={e => persistNvidiaServiceSetting(svc.key, 'temperature', Number(e.target.value))}
+                              className="input-field w-full text-xs"
+                            />
+                          </label>
+                          <label className="text-[11px]">
+                            <span className="block mono text-[9px] mb-1" style={{ color: 'var(--c-ink-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Tokens</span>
+                            <input
+                              type="number"
+                              min="40"
+                              max="12000"
+                              step="10"
+                              value={cfg.maxTokens}
+                              onChange={e => persistNvidiaServiceSetting(svc.key, 'maxTokens', Number(e.target.value))}
+                              className="input-field w-full text-xs"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
               <p className="text-xs mt-3" style={{ color: '#8a8a8a' }}>
-                Les textes IA peuvent utiliser NVIDIA si <code className="mono">NVIDIA_API_KEY</code> est definie sur Vercel.
+                Les choix NVIDIA utilisent la cle <code className="mono">NVIDIA_API_KEY</code> definie sur Vercel. Les reglages sont synchronises sur ton compte.
               </p>
             </div>
             <div className="mb-5 p-4" style={{ border: '1px solid var(--c-line)', borderRadius: 'var(--r-md)', background: 'var(--c-bg)' }}>
